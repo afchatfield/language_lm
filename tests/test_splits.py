@@ -75,6 +75,34 @@ def test_verify_detects_a_missing_file(frozen: Path, tmp_path: Path):
         verify_manifest(frozen)
 
 
+def test_verify_can_be_scoped_to_one_corpus(frozen: Path, tmp_path: Path):
+    """A half-built pipeline must not fail on a corpus a later phase owns."""
+    manifest = json.loads(frozen.read_text())
+    manifest["corpora"]["later_phase"] = {
+        "frozen_at": "2026-01-01T00:00:00+00:00",
+        "source_url": "",
+        "splits": {
+            "all": {
+                "path": "data/not_built_yet.m2",
+                "sha256": "0" * 64,
+                "bytes": 0,
+                "sentences": 0,
+                "edits": 0,
+            }
+        },
+    }
+    frozen.write_text(json.dumps(manifest))
+
+    verify_manifest(frozen, corpora=["demo"])
+    with pytest.raises(ManifestError, match="missing file"):
+        verify_manifest(frozen)
+
+
+def test_verify_rejects_an_unfrozen_corpus_name(frozen: Path):
+    with pytest.raises(ManifestError, match="Not frozen"):
+        verify_manifest(frozen, corpora=["demo", "typo_de"])
+
+
 def test_test_split_refuses_to_load_without_opt_in(frozen: Path):
     with pytest.raises(HeldOutSplitError, match="held out"):
         load_split("demo", "test", manifest_path=frozen)

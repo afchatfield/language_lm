@@ -70,7 +70,7 @@ def main() -> None:
         # a check -- a different spacy version or a changed Leipzig archive
         # would otherwise train on a quietly different corpus.
         print("Already frozen; verifying the rebuild matches ...")
-        verify_manifest()
+        verify_manifest(corpora=[clean_de.CORPUS])
         print("Manifest verified: this corpus is byte-identical to the frozen one.")
 
     write_report(stats, len(sentences), corpora, seed)

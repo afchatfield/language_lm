@@ -114,6 +114,7 @@ train-data:  ## Everything the trainer needs, from a fresh clone
 	$(PYTHON) scripts/freeze_splits.py
 	$(PYTHON) scripts/download_leipzig.py
 	$(PYTHON) -c "from langlm.eval.errant_de.spelling import ensure_dictionary; ensure_dictionary()"
+	$(PYTHON) scripts/build_overcorrection_set.py
 	$(PYTHON) scripts/build_clean_corpus.py
 	$(PYTHON) scripts/build_training_set.py
 
