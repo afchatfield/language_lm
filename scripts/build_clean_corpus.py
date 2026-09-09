@@ -21,7 +21,7 @@ import argparse
 from langlm.config import REPORTS_DIR, load_config
 from langlm.data import clean_de
 from langlm.data.m2 import NONE, NOOP_TYPE, Edit, M2Sentence, write_m2
-from langlm.data.splits import ManifestError, freeze_splits
+from langlm.data.splits import ManifestError, freeze_splits, verify_manifest
 
 REPORT_DIR = REPORTS_DIR / "phase2"
 
@@ -63,10 +63,15 @@ def main() -> None:
             source_url="Leipzig Corpora Collection; see configs/phase2.yaml",
         )
         print("Frozen in the split manifest.")
-    except ManifestError as exc:
-        # Rebuilding with different settings is a deliberate act, and the
-        # manifest is right to refuse it silently.
-        print(f"Not re-frozen: {exc}")
+    except ManifestError:
+        # Already frozen, which is the normal case on a second machine: the
+        # manifest is committed and this rebuild should reproduce it exactly.
+        # Verifying rather than re-freezing is what turns that expectation into
+        # a check -- a different spacy version or a changed Leipzig archive
+        # would otherwise train on a quietly different corpus.
+        print("Already frozen; verifying the rebuild matches ...")
+        verify_manifest()
+        print("Manifest verified: this corpus is byte-identical to the frozen one.")
 
     write_report(stats, len(sentences), corpora, seed)
 

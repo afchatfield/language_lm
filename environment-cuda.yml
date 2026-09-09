@@ -1,0 +1,54 @@
+# Conda environment for a CUDA box -- the H200 that Phase 3 trains on.
+#
+#   conda env create -f environment-cuda.yml
+#   conda activate langlm
+#
+# The difference from `environment.yml` is small and entirely at the edges:
+#
+#   * `mlx` and `mlx-lm` are gone. They are Apple-only and will fail to install
+#     here. Nothing outside the Phase 6 export and the local benchmark uses them.
+#   * torch comes from the CUDA index rather than PyPI's default wheel, which on
+#     Linux is the CPU build.
+#   * `language-tool-python` stays, but nothing in the training path calls it.
+#     LanguageTool is only needed to rebuild the Phase 2 rule survey, and that
+#     report is already committed.
+#
+# Everything else is pinned identically, because the training data is rebuilt
+# from source on this machine and a different spacy model would produce a
+# different corpus.
+name: langlm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      # --- modelling -------------------------------------------------------
+      - torch
+      - transformers
+      - tokenizers
+      - sentencepiece
+      - protobuf
+      - accelerate
+      - peft
+      - trl
+      - datasets
+      - huggingface-hub
+      # --- grammar tooling -------------------------------------------------
+      - language-tool-python
+      - errant==3.0.2
+      - spacy>=3.8,<4
+      - https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.8.0/de_core_news_sm-3.8.0-py3-none-any.whl
+      - spylls
+      # --- plumbing --------------------------------------------------------
+      - requests
+      - pyyaml
+      - pandas
+      - tqdm
+      - rich
+      - typer
+      # --- development -----------------------------------------------------
+      - pytest
+      - ruff
+      - -e .

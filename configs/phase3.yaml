@@ -1,0 +1,54 @@
+# Phase 3 configuration: supervised fine-tuning.
+#
+# The training runs on an H200; the M1 is for development. Measured on the M1,
+# a bf16 LoRA step manages 32 tokens/sec, which puts three epochs over this
+# corpus at about four days. The same run on one H200 is well under an hour.
+# See `docs/h200.md` for the runbook.
+
+model:
+  repo_id: utter-project/EuroLLM-1.7B
+  # bf16 rather than 4-bit. A 4-bit base would train roughly twice as fast even
+  # on the H200, but Phase 4's ablation table has an "uncompressed" row, and it
+  # is not uncompressed if the model was trained quantised. Keeping Phase 3 in
+  # bf16 leaves that comparison clean.
+  dtype: bfloat16
+
+# --- LoRA --------------------------------------------------------------------
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.0
+  # Every linear layer, attention and MLP both. Attention-only is the cheaper
+  # default and consistently the weaker one for a task that has to learn new
+  # output *content* -- the explanations -- rather than only new attention
+  # patterns.
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+# --- optimisation ------------------------------------------------------------
+training:
+  epochs: 3
+  learning_rate: 1.0e-4
+  lr_scheduler: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  # Per-device batch. On an H200 this fits comfortably; the effective batch is
+  # this times `gradient_accumulation`.
+  batch_size: 16
+  gradient_accumulation: 2
+  # Sequences longer than this are dropped, not truncated: a truncated answer
+  # is invalid JSON, and teaching the model to emit that is worse than dropping
+  # the example. The corpus tops out at 339 tokens, so nothing is lost.
+  max_length: 512
+  seed: 20260909
+  # Held out from the generated corpus, to watch for overfitting during the
+  # run. The number that matters is still Falko-MERLIN dev, which is real
+  # learner German rather than our own corruptions.
+  validation_size: 500
+  logging_steps: 25
+  eval_steps: 250
+  save_steps: 500
+
+output:
+  # Adapter weights, not a merged model. Phase 4 does surgery on the base
+  # checkpoint and re-applies the adapter, so they stay separate until Phase 6.
+  adapter_dir: checkpoints/phase3-de
