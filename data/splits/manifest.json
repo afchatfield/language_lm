@@ -26,6 +26,19 @@
           "sha256": "c555ddf98af689e7613b596c18f2461f1b03fab286599866ba5a0907ea555ed7"
         }
       }
+    },
+    "overcorrection_de": {
+      "frozen_at": "2026-09-09T02:23:57+00:00",
+      "source_url": "Leipzig Corpora Collection; see configs/phase1.yaml",
+      "splits": {
+        "all": {
+          "bytes": 63858,
+          "edits": 0,
+          "path": "data/processed/overcorrection/de.m2",
+          "sentences": 400,
+          "sha256": "d06a10a8f60a880dae6dc6a776c73f997529ae512105ca84b39936066d206c3a"
+        }
+      }
     }
   }
 }

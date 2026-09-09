@@ -46,19 +46,46 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 ## Phase 1 — Eval harness and baselines
 *~1 week — do not skip this phase*
 
-- [ ] M²-scorer (F0.5) implemented
-- [ ] German ERRANT running, per-error-type breakdowns
-- [ ] Overcorrection set built: few hundred already-correct German sentences from published prose
-  - [ ] Metric: % of sentences the system modifies
-- [ ] Baseline 1: LanguageTool alone
-- [ ] Baseline 2: base model zero-shot
-- [ ] Baseline 3: base model few-shot (5–10 examples)
+- [x] M²-scorer (F0.5) implemented
+- [x] German ERRANT running, per-error-type breakdowns
+      — agrees with the corpus annotation at 0.949 span precision / 0.932 recall
+      (`reports/phase1/errant_de_agreement.md`)
+- [x] Overcorrection set built: 400 already-correct sentences from Leipzig news and Wikipedia
+  - [x] Metric: % of sentences the system modifies
+- [x] Baseline 1: LanguageTool alone
+- [x] Baseline 2: base model zero-shot
+- [x] Baseline 3: base model few-shot (8 examples, 22% of them already correct)
 
-**Exit criterion:** three numbers in a table.
+**Exit criterion:** ✅ three numbers in a table. `reports/phase1/baselines.md`.
 
 > If LT's F0.5 is very high, that is not bad news. It means the contribution is the
 > *explanations* and the *offline 600MB footprint*. Reframe the project accordingly and
 > carry that framing through to the README.
+
+> **Outcome: the prompted base model already beats LanguageTool.**
+>
+> | System | P | R | F0.5 | Overcorrection |
+> |---|---:|---:|---:|---:|
+> | LanguageTool | 0.5653 | 0.1992 | 0.4134 | 28.7% |
+> | zero-shot | 0.4761 | 0.0905 | 0.2571 | 10.0% |
+> | few-shot | 0.6600 | 0.2675 | **0.5102** | 15.0% |
+>
+> So the contingency above does not fire, and **Phase 3 has to beat 0.5102, not 0.4134**.
+> Setting the bar at LanguageTool would have been setting it too low.
+>
+> Three things to carry forward. **LanguageTool modifies 28.7% of already-correct
+> published prose** — `SU Annen` → `USA Innen`, `Freilebende` → `Frei lebende` — which is
+> the strongest argument in the project so far for a model that knows when to keep quiet.
+> **Detection is not the differentiator: correction is.** LT and few-shot find nearly the
+> same spans (detection F0.5 0.5869 vs 0.5835); few-shot wins because its repairs are
+> right more often (gap +0.1120 vs LT's +0.2020). And **zero-shot's 10% overcorrection
+> rate is not a virtue** — it touches fewer correct sentences but wrecks the ones it
+> touches, 2.6 spurious edits per modified sentence against LT's 1.2, because it
+> paraphrases and truncates instead of correcting (`Dass eine falsche Eingabe eine gültige
+> IBAN ergibt , ist daher unwahrscheinlich .` → `Die IBAN ist falsch .`).
+>
+> The identity row scores 0 spurious edits, so none of the above is the tokeniser
+> manufacturing false positives, and the metric's ceiling on this split is 0.9976.
 
 ---
 

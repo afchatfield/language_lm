@@ -19,12 +19,21 @@ jobs:
       # committed fixture, so CI needs neither the corpora, the n-gram data,
       # nor a LanguageTool server. Only the lightweight dependencies below --
       # notably not torch or transformers. `tokenizers` is here because
-      # `protected_ids` reads the byte-level alphabet from it.
+      # `protected_ids` reads the byte-level alphabet from it; spacy, errant and
+      # spylls are here because the German error typing is real code with real
+      # tests and skipping them in CI would mean not testing them at all.
       - name: Install
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff pytest pyyaml requests tokenizers
+          python -m pip install "spacy>=3.8,<4" errant==3.0.2 spylls
+          python -m pip install https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.8.0/de_core_news_sm-3.8.0-py3-none-any.whl
           python -m pip install -e . --no-deps
+
+      # Fetched here rather than lazily inside a test, so that a network failure
+      # reads as a network failure instead of as a mysterious assertion.
+      - name: Fetch the German dictionary
+        run: python -c "from langlm.eval.errant_de.spelling import ensure_dictionary; ensure_dictionary()"
 
       - name: Lint
         run: |

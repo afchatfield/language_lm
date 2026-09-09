@@ -1,0 +1,55 @@
+# Phase 1 configuration: the evaluation harness and the three baselines.
+#
+# Phase 1 exists to make every later claim falsifiable. Nothing here trains
+# anything; it decides what is measured, on what, and against what.
+
+# --- evaluation data ---------------------------------------------------------
+evaluation:
+  # Falko-MERLIN split used for every development decision. `test` stays frozen
+  # until Phase 3, and `langlm.data.splits.load_split` refuses to hand it over
+  # without an explicit opt-in.
+  split: dev
+  # F-score beta. 0.5 is the GEC convention and the right one here: a checker
+  # that invents corrections is worse than one that misses them.
+  beta: 0.5
+
+# --- overcorrection set ------------------------------------------------------
+# A few hundred sentences of published German prose that need no correction.
+# Deliberately NOT screened with LanguageTool: doing so would hand LanguageTool a
+# zero by construction. See `langlm.data.overcorrection`.
+overcorrection:
+  size: 400
+  seed: 20260909
+  corpora: [deu_news_2024_100K, deu_wikipedia_2021_100K]
+
+# --- baselines ---------------------------------------------------------------
+baselines:
+  languagetool:
+    language: de-DE
+    # Whitespace-tokenised M2 text puts a space before every full stop, which is
+    # a typography complaint, not a grammar one. Left on, these rules would
+    # fire on every sentence in the corpus and drown the signal.
+    disabled_rules:
+      - WHITESPACE_RULE
+      - COMMA_PARENTHESIS_WHITESPACE
+      - UNPAIRED_BRACKETS
+    # Only apply a match when LanguageTool is confident enough to name a fix.
+    # Matches with no replacement are detections, not corrections.
+    require_replacement: true
+
+  model:
+    # The Phase 0 winner. See reports/phase0/base_model_decision.md.
+    repo_id: utter-project/EuroLLM-1.7B
+    max_new_tokens: 96
+    # Greedy: a baseline should be reproducible, and sampling would make the
+    # number depend on a seed nobody will remember.
+    temperature: 0.0
+    # Examples for the few-shot baseline are drawn from the *train* split, never
+    # from dev or test.
+    few_shot_examples: 8
+    few_shot_seed: 20260909
+    # Explanations are written in English. The user of this tool is a learner of
+    # German, not a native speaker: an explanation they cannot read is not an
+    # explanation. It also keeps one explanation language across German and
+    # Spanish, so Phase 5 reuses the templates rather than re-authoring them.
+    explanation_language: en

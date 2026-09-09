@@ -6,14 +6,15 @@
 #
 .PHONY: help setup test lint format \
         ngrams lt-up lt-down lt-logs lt-check \
-        corpora data fertility phase0 \
+        corpora data dictionary fertility phase0 \
+        overcorrection errant-check baselines phase1 \
         clean-ngrams clean-data
 
 PYTHON ?= python
 COMPOSE = docker compose -f docker/docker-compose.yml
 
 help:  ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 # --- environment ------------------------------------------------------------
@@ -61,11 +62,28 @@ data:  ## Download Falko-MERLIN and freeze the train/dev/test splits
 	$(PYTHON) scripts/download_falko_merlin.py
 	$(PYTHON) scripts/freeze_splits.py
 
+dictionary:  ## Fetch the German Hunspell dictionary used for error typing (~4MB)
+	$(PYTHON) -c "from langlm.eval.errant_de.spelling import ensure_dictionary; ensure_dictionary()"
+
 fertility:  ## Run the tokenizer fertility + vocab-trim analysis
 	$(PYTHON) scripts/run_fertility.py
 
 phase0: data corpora fertility  ## Run the whole of Phase 0 (after `make ngrams lt-up lt-check`)
 	@echo "Phase 0 artefacts are in reports/phase0/"
+
+# --- Phase 1: eval harness and baselines ------------------------------------
+
+overcorrection:  ## Build and freeze the set of already-correct German sentences
+	$(PYTHON) scripts/build_overcorrection_set.py
+
+errant-check:  ## Measure the German ERRANT annotator against the corpus annotation
+	$(PYTHON) scripts/check_errant_de.py
+
+baselines:  ## Run every Phase 1 baseline and write the results table
+	$(PYTHON) scripts/run_baselines.py
+
+phase1: dictionary overcorrection errant-check baselines  ## Run the whole of Phase 1
+	@echo "Phase 1 artefacts are in reports/phase1/"
 
 # --- cleanup ----------------------------------------------------------------
 

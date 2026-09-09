@@ -34,6 +34,17 @@ dependencies:
       - mlx-lm
       # --- grammar tooling -------------------------------------------------
       - language-tool-python
+      # ERRANT supplies the alignment machinery and the Edit type; the German
+      # merger and classifier are in `langlm.eval.errant_de`. spacy provides the
+      # German tags, lemmas and dependencies those rules read, and the model is
+      # pinned by URL so that everyone's error types come out the same.
+      - errant==3.0.2
+      - spacy>=3.8,<4
+      - https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.8.0/de_core_news_sm-3.8.0-py3-none-any.whl
+      # Hunspell in pure Python, for "is this a German word at all?" -- the
+      # question that separates a misspelling from a wrong word choice. A flat
+      # word list cannot answer it for a language that builds compounds on demand.
+      - spylls
       # --- plumbing --------------------------------------------------------
       - requests
       - pyyaml

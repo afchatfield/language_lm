@@ -112,9 +112,23 @@ class LanguageToolClient:
             **params: Extra form fields passed straight to the API, e.g.
                 ``disabledRules="WHITESPACE_RULE"``.
         """
+        return [Match.from_api(m) for m in self.check_raw(text, language, **params)]
+
+    def check_raw(self, text: str, language: str | None = None, **params: Any) -> list[dict]:
+        """The ``matches`` array exactly as the server sent it.
+
+        Kept public for the response cache, which stores what the server said
+        rather than what this module currently chooses to read out of it: a
+        later phase that wants a field :class:`Match` drops today should not
+        have to re-run a day of LanguageTool queries to get it.
+        """
         payload = {"text": text, "language": language or self.language, **params}
-        data = self._post("/v2/check", payload)
-        return [Match.from_api(m) for m in data.get("matches", [])]
+        return self._post("/v2/check", payload).get("matches", [])
+
+    def software(self) -> dict[str, Any]:
+        """The server's own description of itself: name, version, build date."""
+        payload = {"text": "Test", "language": self.language}
+        return self._post("/v2/check", payload).get("software", {})
 
     def check_many(self, texts: list[str], **kwargs: Any) -> list[list[Match]]:
         """Check several texts. Sequential: the server parallelises internally."""
