@@ -11,9 +11,9 @@ Retained languages for the trim projection: `de`, `en`. English stays because th
 | Model | Params | Vocab | Hidden | Layers | Tied? | Embed+head params | Share of model |
 |---|---:|---:|---:|---:|:--:|---:|---:|
 | `EuroLLM-1.7B` | 1.66B | 128,000 | 2,048 | 24 | **no** | 524M | **31.6%** |
-| `Qwen3-1.7B` | 2.03B | 151,936 | 2,048 | 28 | yes | 311M | **15.3%** |
-| `Qwen3.5-0.8B` | 0.87B | 248,320 | 1,024 | 24 | yes | 254M | **29.1%** |
-| `Qwen3.5-2B` | 2.27B | 248,320 | 2,048 | 24 | yes | 509M | **22.4%** |
+| `Qwen3-1.7B` | 2.03B | 151,936 | 2,048 | 28 | yes | 311M | 15.3% |
+| `Qwen3.5-0.8B` | 0.87B | 248,320 | 1,024 | 24 | yes | 254M | 29.1% |
+| `Qwen3.5-2B` | 2.27B | 248,320 | 2,048 | 24 | yes | 509M | 22.4% |
 
 ## Fertility (tokens per word -- lower is better)
 
@@ -37,7 +37,7 @@ Fertility divides by whitespace words, which flatters languages that write compo
 
 ## Vocabulary-trim projection
 
-`kept` is the smallest vocabulary covering that share of all token *occurrences* in the de+en corpora, plus every special and single-character token, which must survive so the tokenizer can still encode arbitrary text. Reporting a curve rather than a single "every id ever seen" count keeps the estimate honest: a long tail of ids seen once each inflates the vocabulary while carrying almost no probability mass.
+`kept` is the smallest vocabulary covering that share of all token *occurrences* in the de+en corpora, plus the special tokens and the 256 byte-fallback tokens, which must survive so the tokenizer can still encode arbitrary text. (Only genuine byte stand-ins are protected -- shielding every single-character token would keep 8,285 mostly-CJK rows in EuroLLM alone and understate the achievable trim.) Reporting a curve rather than a single "every id ever seen" count keeps the estimate honest: a long tail of ids seen once each inflates the vocabulary while carrying almost no probability mass.
 
 `saved` is the resulting reduction in the embedding table plus, where untied, the LM head -- at bf16, and as a fraction of the whole model.
 

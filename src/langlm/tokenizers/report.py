@@ -116,13 +116,18 @@ def _geometry_table(results: Sequence[FertilityResult]) -> str:
         "| Model | Params | Vocab | Hidden | Layers | Tied? | Embed+head params | Share of model |",
         "|---|---:|---:|---:|---:|:--:|---:|---:|",
     ]
+    # Bold only the largest embedding share: that is the model with the most to
+    # gain from Phase 4, and bolding every row would say nothing.
+    best_share = max((r.spec.embedding_share for r in results), default=0.0)
     for result in results:
         spec = result.spec
+        share = f"{spec.embedding_share:.1%}"
         rows.append(
             f"| `{spec.name}` | {spec.params / 1e9:.2f}B | {spec.vocab_size:,} | "
             f"{spec.hidden_size:,} | {spec.num_layers} | "
             f"{'yes' if spec.tie_word_embeddings else '**no**'} | "
-            f"{spec.embedding_params / 1e6:.0f}M | **{spec.embedding_share:.1%}** |"
+            f"{spec.embedding_params / 1e6:.0f}M | "
+            f"{f'**{share}**' if spec.embedding_share == best_share else share} |"
         )
     return "\n".join(rows)
 
@@ -159,8 +164,11 @@ def _bytes_table(results: Sequence[FertilityResult], corpus_order: Sequence[str]
 def _trim_preamble(trim_languages: Sequence[str]) -> str:
     return (
         "`kept` is the smallest vocabulary covering that share of all token *occurrences* in "
-        f"the {'+'.join(trim_languages)} corpora, plus every special and single-character "
-        "token, which must survive so the tokenizer can still encode arbitrary text. "
+        f"the {'+'.join(trim_languages)} corpora, plus the special tokens and the 256 "
+        "byte-fallback tokens, which must survive so the tokenizer can still encode "
+        "arbitrary text. (Only genuine byte stand-ins are protected -- shielding every "
+        "single-character token would keep 8,285 mostly-CJK rows in EuroLLM alone and "
+        "understate the achievable trim.) "
         'Reporting a curve rather than a single "every id ever seen" count keeps the '
         "estimate honest: a long tail of ids seen once each inflates the vocabulary while "
         "carrying almost no probability mass.\n\n"
