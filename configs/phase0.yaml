@@ -1,0 +1,60 @@
+# Phase 0 configuration: base-model candidates, corpora, and analysis settings.
+
+# --- base model candidates ---------------------------------------------------
+# Only the tokenizer and config are downloaded for the fertility analysis (a few
+# MB each), so the shortlist is cheap to widen. Parameter counts are resolved
+# from the Hugging Face hub at run time rather than written down here, because
+# advertised names mislead: "Qwen3-1.7B" counts only non-embedding parameters
+# and is really 2.03B in total, which is exactly the discrepancy this analysis
+# is trying to surface.
+candidates:
+  - name: EuroLLM-1.7B
+    repo_id: utter-project/EuroLLM-1.7B
+    note: EU-focused, explicitly trained on German/Spanish/French. Untied embeddings.
+  - name: Qwen3-1.7B
+    repo_id: Qwen/Qwen3-1.7B
+    note: Large vocabulary, tied embeddings.
+  - name: Qwen3.5-0.8B
+    repo_id: Qwen/Qwen3.5-0.8B
+    note: Newest Qwen generation, 200+ languages, smallest candidate.
+  - name: Qwen3.5-2B
+    repo_id: Qwen/Qwen3.5-2B
+    note: Newest Qwen generation at the top of the size budget.
+  - name: Gemma-3-1B
+    repo_id: google/gemma-3-1b-pt
+    gated: true
+    note: >
+      Biggest vocabulary of the shortlist, so the biggest trim opportunity, but
+      gated on Hugging Face. Requires `huggingface-cli login` and accepting
+      Google's licence on the model page; skipped with a note if unavailable.
+
+# --- corpora -----------------------------------------------------------------
+# Leipzig Corpora Collection: one sentence per line, tab-separated `id\tsentence`.
+# 100K-sentence editions are ~20-30MB each and plenty for a fertility estimate.
+corpora:
+  - key: de_news
+    lang: de
+    leipzig: deu_news_2024_100K
+  - key: de_wikipedia
+    lang: de
+    leipzig: deu_wikipedia_2021_100K
+  - key: en_news
+    lang: en
+    leipzig: eng_news_2024_100K
+  - key: es_news
+    lang: es
+    leipzig: spa_news_2023_100K
+
+# --- analysis ----------------------------------------------------------------
+analysis:
+  # Cap sentences per corpus so the analysis stays fast and reproducible.
+  max_sentences: 100_000
+  # Fraction of token *occurrences* a retained vocabulary must cover. Reporting a
+  # curve rather than a single "ever touched" number keeps the trim estimate
+  # honest: rare tokens seen once contribute nothing but inflate the vocabulary.
+  coverage_thresholds: [0.99, 0.999, 0.9999, 1.0]
+  # Languages whose tokens are retained by a Phase 4 vocabulary trim. English
+  # stays in because prompts and the instruction format are English.
+  trim_languages: [de, en]
+  # Bytes per parameter in the deployed checkpoint, for the size projection.
+  bytes_per_param: 2  # bf16

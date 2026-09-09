@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The test suite is deliberately offline: every test runs against a
+      # committed fixture, so CI needs neither the corpora, the n-gram data,
+      # nor a LanguageTool server. Only the lightweight dependencies below --
+      # notably not torch or transformers. `tokenizers` is here because
+      # `protected_ids` reads the byte-level alphabet from it.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest pyyaml requests tokenizers
+          python -m pip install -e . --no-deps
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Test
+        run: pytest

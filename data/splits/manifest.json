@@ -1,0 +1,31 @@
+{
+  "corpora": {
+    "falko_merlin": {
+      "frozen_at": "2026-09-09T01:05:04+00:00",
+      "source_url": "https://github.com/adrianeboyd/boyd-wnut2018/releases/download/wnut2018/data.tar.gz",
+      "splits": {
+        "dev": {
+          "bytes": 579826,
+          "edits": 6385,
+          "path": "data/processed/falko_merlin/dev.m2",
+          "sentences": 2503,
+          "sha256": "24541dd8b6172083456f7e8cf4543a6225d8a285ebc9245030d73bbb4bd921d4"
+        },
+        "test": {
+          "bytes": 541597,
+          "edits": 5963,
+          "path": "data/processed/falko_merlin/test.m2",
+          "sentences": 2337,
+          "sha256": "7aba238d8e27e34e2c6c49bff6bb6a822d2535ecbd16c52cfa43b33b25a2ceda"
+        },
+        "train": {
+          "bytes": 4481863,
+          "edits": 49058,
+          "path": "data/processed/falko_merlin/train.m2",
+          "sentences": 19237,
+          "sha256": "c555ddf98af689e7613b596c18f2461f1b03fab286599866ba5a0907ea555ed7"
+        }
+      }
+    }
+  }
+}

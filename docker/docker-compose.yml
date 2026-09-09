@@ -1,0 +1,35 @@
+# Self-hosted LanguageTool, used both as the Phase 1 baseline and as the source
+# of rule ids / messages for the Phase 2 training data.
+#
+#   make ngrams    # download the n-gram data first (~1.7GB download, ~6GB on disk)
+#   make lt-up
+#   make lt-check  # confirms the n-grams actually loaded
+#
+# Without `langtool_languageModel` pointing at real n-gram data, LanguageTool
+# silently degrades to dictionary spellchecking: the confusion-set rules that
+# catch das/dass and similar homophone errors never fire. `make lt-check` exists
+# because that failure is invisible otherwise.
+services:
+  languagetool:
+    image: erikvl87/languagetool:6.8
+    container_name: langlm-languagetool
+    ports:
+      - "8010:8010"
+    environment:
+      # Path *inside the container* to the directory holding per-language
+      # n-gram subdirectories (de/, es/, ...).
+      langtool_languageModel: /ngrams
+      # The n-gram indexes are memory-hungry; 4g is the documented floor.
+      Java_Xmx: 4g
+      # Refuse requests larger than a paragraph: the pipeline works sentence
+      # by sentence, so anything bigger is a bug upstream.
+      langtool_maxTextLength: "8000"
+    volumes:
+      - ../data/raw/ngrams:/ngrams:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8010/v2/languages"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped

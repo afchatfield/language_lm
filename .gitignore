@@ -1,0 +1,32 @@
+# Data artefacts. Everything under data/ is downloadable or derived; only the
+# split manifest is version-controlled, because it is the record that freezes
+# the test set.
+data/**
+!data/splits/
+!data/splits/manifest.json
+!data/**/.gitkeep
+
+# Model checkpoints and adapters
+checkpoints/
+adapters/
+*.safetensors
+*.gguf
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Hugging Face / caches
+.cache/
+wandb/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

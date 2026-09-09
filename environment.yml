@@ -1,0 +1,48 @@
+# Conda environment for the language_lm project.
+#
+#   conda env create -f environment.yml
+#   conda activate langlm
+#
+# Notes for Apple Silicon (the primary development target, an M1/16GB):
+#   * PyTorch runs on the `mps` backend. This is the canonical training path
+#     (transformers + peft) because Phase 4's vocab-trimming and depth-pruning
+#     surgery operates on standard Hugging Face checkpoints.
+#   * `mlx` / `mlx-lm` are here for fast local inference, the tokens/sec
+#     benchmark, and the Phase 6 export.
+#   * `bitsandbytes` is deliberately absent: it has no Apple Silicon build.
+#     4-bit quantisation comes from MLX and llama.cpp in Phase 6 instead.
+name: langlm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      # --- modelling -------------------------------------------------------
+      - torch
+      - transformers
+      - tokenizers
+      - sentencepiece
+      - protobuf
+      - accelerate
+      - peft
+      - trl
+      - datasets
+      - huggingface-hub
+      # --- Apple Silicon inference ----------------------------------------
+      - mlx
+      - mlx-lm
+      # --- grammar tooling -------------------------------------------------
+      - language-tool-python
+      # --- plumbing --------------------------------------------------------
+      - requests
+      - pyyaml
+      - pandas
+      - tqdm
+      - rich
+      - typer
+      # --- development -----------------------------------------------------
+      - pytest
+      - ruff
+      - pre-commit
+      - -e .

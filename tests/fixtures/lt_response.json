@@ -1,0 +1,25 @@
+{
+  "matches": [
+    {
+      "message": "Bitte prüfen Sie, ob ‚viel‘ (eine große Menge) hier das richtige Wort ist anstelle von ‚fiel‘ (zu ‚fallen‘).",
+      "shortMessage": "Mögliche Wortverwechselung",
+      "replacements": [
+        {
+          "value": "viel",
+          "shortDescription": "eine große Menge"
+        }
+      ],
+      "offset": 12,
+      "length": 4,
+      "context": {
+        "text": "Das hat mir fiel geholfen."
+      },
+      "rule": {
+        "id": "CONFUSION_RULE_FIEL_VIEL",
+        "category": {
+          "id": "TYPOS"
+        }
+      }
+    }
+  ]
+}
