@@ -8,6 +8,7 @@
         ngrams lt-up lt-down lt-logs lt-check \
         corpora data dictionary fertility phase0 \
         overcorrection errant-check baselines phase1 \
+        clean-corpus lt-survey weights training-set phase2 \
         clean-ngrams clean-data
 
 PYTHON ?= python
@@ -84,6 +85,23 @@ baselines:  ## Run every Phase 1 baseline and write the results table
 
 phase1: dictionary overcorrection errant-check baselines  ## Run the whole of Phase 1
 	@echo "Phase 1 artefacts are in reports/phase1/"
+
+# --- Phase 2: data pipeline -------------------------------------------------
+
+clean-corpus:  ## Filter and freeze the clean German text the corruptors damage
+	$(PYTHON) scripts/build_clean_corpus.py
+
+lt-survey:  ## Ask LanguageTool what it calls our injected errors (needs lt-up)
+	$(PYTHON) scripts/survey_lt_rules.py
+
+weights:  ## Re-derive the injected error distribution from Falko + the baselines
+	$(PYTHON) scripts/derive_injection_weights.py
+
+training-set:  ## Corrupt, explain, and write the training set
+	$(PYTHON) scripts/build_training_set.py
+
+phase2: clean-corpus lt-survey weights training-set  ## Run the whole of Phase 2
+	@echo "Phase 2 artefacts are in reports/phase2/"
 
 # --- cleanup ----------------------------------------------------------------
 

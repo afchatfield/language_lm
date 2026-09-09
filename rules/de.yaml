@@ -1,0 +1,169 @@
+# German explanation templates.
+#
+# Keyed on the corruptor that made the error, not on the LanguageTool rule that
+# found it. The Phase 2 survey is why: 78% of LanguageTool's matches on our
+# injected data are GERMAN_SPELLER_RULE, whose message is "Möglicher Tippfehler
+# gefunden" -- possible typo found. That is true, useless, and identical for a
+# stripped umlaut, an ss written for ß, and a slipped finger. We know which of
+# those we did, so we can say something better.
+#
+# LanguageTool is still used where it knows something we do not: which case a
+# preposition governs, which article agrees. Those templates are keyed on its
+# rule id and listed under `languagetool:`.
+#
+# Explanations are English on purpose. The reader is learning German; an
+# explanation they cannot read is not an explanation. See configs/phase1.yaml.
+#
+# Placeholders: {wrong} is what the learner wrote, {right} the correction.
+
+# `reference` cites the Rat für deutsche Rechtschreibung ruleset, which is free
+# and numbered. Only paragraphs that have been checked against the official text
+# are filled in; `null` means the rule is real but the citation has not been
+# verified, and shipping a wrong paragraph number would be worse than shipping
+# none. See reports/phase2/explanations.md for what still needs checking.
+
+corruptors:
+  noun_case:
+    error_type: R:ORTH
+    reference: "§ 55"
+    explanation: >-
+      German capitalises every noun, not just names. «{wrong}» is a noun here,
+      so it needs a capital letter: «{right}».
+
+  sharp_s:
+    error_type: R:SPELL
+    reference: "§ 25"
+    explanation: >-
+      After a long vowel or a diphthong German writes ß, not ss. «{right}» keeps
+      the ß because the vowel before it is long; ss would say the vowel is short.
+
+  umlaut:
+    error_type: R:SPELL
+    reference: null
+    explanation: >-
+      The umlaut is part of the letter, not decoration on it. «{wrong}» and
+      «{right}» are different words to a German reader. Write «{right}».
+
+  das_dass:
+    error_type: R:SPELL
+    reference: null
+    explanation: >-
+      «das» and «dass» sound the same and do different jobs. «das» is an article
+      or a relative pronoun and points at a thing; «dass» is a conjunction that
+      opens a subordinate clause. Here the sentence needs «{right}».
+
+  article_form:
+    error_type: R:DET:FORM
+    reference: null
+    explanation: >-
+      The article has to agree with its noun in gender, number and case.
+      «{wrong}» does not fit here; the form the sentence needs is «{right}».
+
+  preposition:
+    error_type: R:ADP
+    reference: null
+    explanation: >-
+      German prepositions are not chosen by translating the English one. This
+      phrase takes «{right}» rather than «{wrong}».
+
+  drop_article:
+    error_type: M:DET
+    reference: null
+    explanation: >-
+      German nouns almost always need an article, even where English drops it.
+      Add «{right}» before the noun.
+
+  drop_comma_subordinate:
+    error_type: M:PUNCT
+    reference: "§ 74"
+    explanation: >-
+      German separates a subordinate clause from its main clause with a comma.
+      Unlike English, this is a rule rather than a matter of taste. Add the comma.
+
+  drop_comma_coordinating:
+    error_type: M:PUNCT
+    reference: null
+    explanation: >-
+      German puts a comma before «sondern», «aber», «doch» and «jedoch» when they
+      join two clauses. English usually does not, which is why this comma is easy
+      to miss.
+
+  drop_comma:
+    error_type: M:PUNCT
+    reference: null
+    explanation: >-
+      A comma belongs here. German uses them to mark off parts of a sentence --
+      an apposition, an insertion, a list -- more strictly than English does.
+
+  keyboard:
+    error_type: R:SPELL
+    reference: null
+    explanation: >-
+      «{wrong}» is not a German word. It looks like a slip for «{right}».
+
+  adjective_form:
+    error_type: R:ADJ:FORM
+    reference: null
+    explanation: >-
+      An adjective before a noun takes an ending that depends on the noun's
+      gender, number and case, and on whether an article comes first. Here the
+      adjective should read «{right}», not «{wrong}».
+
+  two_way_case:
+    error_type: R:DET:FORM
+    reference: null
+    explanation: >-
+      This preposition takes the accusative for movement towards somewhere and
+      the dative for position. Nothing is moving here, so it is «{right}» rather
+      than «{wrong}».
+
+  verb_final:
+    error_type: R:WO
+    reference: null
+    explanation: >-
+      In a subordinate clause the finite verb goes to the very end, which is not
+      where English puts it. The clause should read «{right}».
+
+  separable_prefix:
+    error_type: R:WO
+    reference: null
+    explanation: >-
+      This verb is separable. In a main clause the prefix detaches and moves to
+      the end, so it is «{right}» rather than one word.
+
+# Where LanguageTool adds information the corruptor does not have. These refine
+# the template above rather than replacing it: the corruptor says what was
+# changed, the rule id says why that particular form is wrong.
+languagetool:
+  PRAEP_DAT:
+    explanation: >-
+      This preposition governs the dative, so the article that follows it takes
+      the dative form: «{right}».
+  PRAEP_AKK:
+    explanation: >-
+      This preposition governs the accusative, so what follows it takes the
+      accusative form: «{right}».
+  PRAEP_GEN:
+    explanation: >-
+      This preposition governs the genitive in standard written German, so what
+      follows it takes the genitive form: «{right}».
+  DEN_DEM:
+    explanation: >-
+      «den» is accusative and «dem» is dative. The verb and preposition here
+      call for «{right}».
+  KONJUNKTION_DASS_DAS:
+    explanation: >-
+      This clause is opened by a conjunction, which is «dass» with two s.
+  KOMMA_ZWISCHEN_HAUPT_UND_NEBENSATZ:
+    explanation: >-
+      A comma goes between the main clause and the subordinate clause.
+  KOMMA_ZWISCHEN_HAUPT_UND_NEBENSATZ_2:
+    explanation: >-
+      A comma goes between the two clauses here.
+  DE_CASE:
+    explanation: >-
+      Outside the start of a sentence, German capitalises only nouns and proper
+      names.
+  UPPERCASE_SENTENCE_START:
+    explanation: >-
+      A sentence starts with a capital letter.

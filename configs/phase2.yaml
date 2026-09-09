@@ -1,0 +1,74 @@
+# Phase 2 configuration: the data pipeline.
+#
+# Phase 2 builds training data by damaging correct German on purpose and
+# labelling the damage. This file decides what counts as correct German to
+# start from; the corruptors and the explanation templates get their own
+# sections as they land.
+
+# --- clean source text -------------------------------------------------------
+clean_corpus:
+  # The same Leipzig samples pinned for the tokenizer analysis and the
+  # overcorrection set. Published, edited prose, and fixed archives, so the
+  # corpus is the same on every machine.
+  corpora: [deu_news_2024_100K, deu_wikipedia_2021_100K]
+  # Roughly twice the ~30k example target. The surplus is not waste: a
+  # corruptor that needs a subordinate clause cannot use a sentence that has
+  # none, so the error-type distribution is bought out of headroom.
+  size: 60000
+  # Shuffle seed. Shares the value used for the overcorrection set and the
+  # few-shot prompt, so there is one seed in this project rather than three.
+  seed: 20260909
+
+# --- error injection ---------------------------------------------------------
+# Derived, not hand-picked: `scripts/derive_injection_weights.py` blends the
+# Falko-MERLIN error histogram with the Phase 1 few-shot recall and writes this
+# block. Regenerate it rather than editing it, and see
+# `reports/phase2/injection_weights.md` for the table it came from.
+#
+# `R:ADP`, `M:DET` and `R:WO` carry a 2x boost: the prompted baseline recovers
+# them at 0.04, 0.05 and 0.09, so an example of one teaches more than an example
+# of spelling, which it already handles at 0.49. The cap keeps the corpus
+# recognisably learner-shaped instead of turning it into a list of the
+# baseline's weaknesses.
+#
+# The rates are renormalised over the eight types the corruptors can produce, so
+# they are above their corpus-wide share; types no rule injects -- verb
+# morphology, missing pronouns -- are absent and their share is redistributed.
+injection:
+  # How many errors to put in one sentence, sampled inclusively. Most learner
+  # sentences in Falko-MERLIN carry one or two.
+  errors_per_sentence: [1, 2]
+  weights:
+    R:SPELL: 0.2076
+    R:DET:FORM: 0.1684
+    M:PUNCT: 0.1493
+    R:ORTH: 0.1200
+    R:ADP: 0.1066
+    M:DET: 0.0975
+    R:WO: 0.0805
+    R:ADJ:FORM: 0.0714
+
+# --- LanguageTool, for the rule-id survey -------------------------------------
+# Phase 1 has its own `disabled_rules` and this list is deliberately not shared
+# with it. Phase 1's numbers are published, and its config is what makes them
+# reproducible; editing it now to improve a Phase 2 survey would change the
+# provenance of a result that has already been reported.
+#
+# Nothing is lost by keeping them separate, because the two rules added here
+# never affected Phase 1's score anyway. They fire on whitespace-tokenised M2
+# text, which puts a space before every full stop -- but Phase 1 re-tokenised
+# every system's output before scoring, which normalised those differences away.
+# That is visible in the Phase 1 report: the identity baseline shows zero
+# spurious edits, and LanguageTool's spurious edits are R:SPELL and R:ORTH with
+# no whitespace type among them. The survey counts *matches* rather than applied
+# corrections, so here the same rules are pure noise -- 3.7% of everything
+# LanguageTool said.
+languagetool:
+  disabled_rules:
+    - WHITESPACE_RULE
+    - COMMA_PARENTHESIS_WHITESPACE
+    - UNPAIRED_BRACKETS
+    # Added for Phase 2: both are complaints about the space that whitespace
+    # tokenisation puts before punctuation, not about anything we injected.
+    - LEERZEICHEN_NACH_VOR_ANFUEHRUNGSZEICHEN
+    - LEERZEICHEN_VOR_AUSRUFEZEICHEN_ETC

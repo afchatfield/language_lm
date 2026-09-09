@@ -1,5 +1,18 @@
 {
   "corpora": {
+    "clean_de": {
+      "frozen_at": "2026-09-09T14:45:04+00:00",
+      "source_url": "Leipzig Corpora Collection; see configs/phase2.yaml",
+      "splits": {
+        "all": {
+          "bytes": 10057321,
+          "edits": 0,
+          "path": "data/processed/clean_de/de.m2",
+          "sentences": 60000,
+          "sha256": "70bc5287223af775b5ba16577161b67f6f3945b44086074ed9cb3a2eed28e4ce"
+        }
+      }
+    },
     "falko_merlin": {
       "frozen_at": "2026-09-09T01:05:04+00:00",
       "source_url": "https://github.com/adrianeboyd/boyd-wnut2018/releases/download/wnut2018/data.tar.gz",

@@ -6,13 +6,12 @@ for the tokenizer analysis -- published, edited prose, which is as close to
 grammar; they are about removing the scrape artefacts that would otherwise let a
 system look bad for objecting to a broken sentence that no editor ever wrote.
 
-Deliberately absent: any filter that asks a grammar checker whether the sentence
-is correct. Screening the set with LanguageTool would guarantee LanguageTool an
-overcorrection rate of zero, and the baseline it is measured against would be its
-own opinion. The one lexical filter that is applied -- every lower-case word must
-be in the German dictionary -- targets typos and OCR damage, and leaves the
-grammar untouched. Capitalised unknowns are kept because German news is full of
-perfectly correct proper nouns no dictionary has heard of.
+The filters themselves live in `langlm.data.quality`, because Phase 2's training
+corpus asks the same question of the same scrapes and the two sets must not
+drift apart. Note what is deliberately absent there: any filter that asks a
+grammar checker whether the sentence is correct. Screening this set with
+LanguageTool would guarantee LanguageTool an overcorrection rate of zero, and
+the baseline it is measured against would be its own opinion.
 
 The result is written as an M2 file whose every sentence carries a noop
 annotation: a corpus in which the correct answer is to change nothing. That
@@ -22,12 +21,14 @@ makes it loadable, freezable and scoreable with everything else in the project.
 from __future__ import annotations
 
 import random
-import re
 from collections.abc import Iterator, Sequence
 
 from langlm.config import PROCESSED_DIR
 from langlm.data.leipzig import read_sentences
 from langlm.data.m2 import NONE, NOOP_TYPE, Edit, M2Sentence
+from langlm.data.quality import is_clean, spelled_correctly
+
+__all__ = ["CORPUS", "build", "candidates", "is_clean", "spelled_correctly"]
 
 #: Where the built set lives.
 OVERCORRECTION_DIR = PROCESSED_DIR / "overcorrection"
@@ -39,55 +40,6 @@ CORPUS = "overcorrection_de"
 #: to object to; very long ones are usually scrape damage rather than prose.
 MIN_TOKENS = 8
 MAX_TOKENS = 30
-
-#: Characters a clean German sentence is made of. Anything else -- angle
-#: brackets, pipes, stray control characters -- marks a scraping artefact. The
-#: dashes and quotation marks are the German typographic ones on purpose, which
-#: is what the ambiguous-character lint below is being told.
-ALLOWED = re.compile(r"^[\w \-–—.,;:!?'\"„“”‚‘’()§%&/+°ÄÖÜäöüß€$]+$")  # noqa: RUF001
-
-#: Substrings that mark a sentence as web furniture rather than prose.
-JUNK = ("http", "www.", "@", "|", "©", "...", "…", "[", "]", "<", ">")
-
-#: Paired characters that must balance. An unclosed quote usually means the
-#: sentence was cut out of a longer one.
-PAIRS = (('"', '"'), ("(", ")"), ("„", "“"))
-
-
-def is_clean(sentence: str) -> bool:
-    """True if the sentence looks like a whole, undamaged sentence of prose."""
-    if not sentence or sentence[0].islower() or sentence[-1] not in ".!?":
-        return False
-    if any(junk in sentence for junk in JUNK):
-        return False
-    if not ALLOWED.match(sentence):
-        return False
-    if sentence.isupper():
-        return False
-    for left, right in PAIRS:
-        if left == right:
-            if sentence.count(left) % 2:
-                return False
-        elif sentence.count(left) != sentence.count(right):
-            return False
-    return True
-
-
-def spelled_correctly(tokens: Sequence[str]) -> bool:
-    """True if every lower-case word in the sentence is in the dictionary.
-
-    Only lower-case words are checked. A capitalised unknown is far more likely
-    to be a name -- ``Selenskyj``, ``Bundesverfassungsgericht`` -- than a typo,
-    and rejecting those would quietly bias the set towards sentences with no
-    proper nouns in them.
-    """
-    from langlm.eval.errant_de.spelling import is_known_word
-
-    return all(
-        is_known_word(token)
-        for token in tokens
-        if token.isalpha() and token.islower() and len(token) > 1
-    )
 
 
 def candidates(corpora: Sequence[str], seed: int) -> Iterator[str]:

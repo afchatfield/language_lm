@@ -92,29 +92,66 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 ## Phase 2 — Data pipeline
 *~2 weeks — this is the real work*
 
-- [ ] Clean German source text: CulturaX / Wikipedia / Leipzig, quality-filtered
-- [ ] Error injection module (`corruptors/de.py`)
-  - [ ] Noun capitalisation
-  - [ ] Comma rules (subordinate clauses, infinitive groups)
-  - [ ] ß / ss, umlaut stripping
-  - [ ] Article gender (der/die/das)
-  - [ ] Adjective declension endings
-  - [ ] Case errors, esp. after Wechselpräpositionen
-  - [ ] Verb-final word order in subordinate clauses
-  - [ ] Separable prefix placement
-  - [ ] das / dass
-  - [ ] Keyboard-adjacency typos
-- [ ] **Weight injection distribution to match the Falko-MERLIN error histogram from Phase 1**
-- [ ] Run LT over corrupted text → rule IDs + messages
-- [ ] Explanation templating (`rules/de.yaml`)
-  - [ ] Hand-write templates for top ~100 rule IDs (covers most volume, keeps explanations consistent)
-  - [ ] LLM-rewrite the long tail
-- [ ] Negative examples: **22%** correct sentences with empty edit lists — matches the measured
+- [x] Clean German source text: Leipzig news + Wikipedia, quality-filtered
+      — 60,000 sentences frozen; the 400-sentence overcorrection set is excluded by
+      construction (`reports/phase2/clean_corpus.md`)
+- [x] Error injection module (`corruptors/de.py`) — 13 rules, 4 of them parse-based
+  - [x] Noun capitalisation — common nouns only; see the outcome note
+  - [x] Comma rules — split three ways by which comma rule is broken
+  - [x] ß / ss, umlaut stripping
+  - [x] Article gender (der/die/das)
+  - [x] Adjective declension endings
+  - [x] Case errors after Wechselpräpositionen
+  - [x] Verb-final word order in subordinate clauses
+  - [x] Separable prefix placement
+  - [x] das / dass
+  - [x] Keyboard-adjacency typos
+- [x] **Weight injection distribution to match the Falko-MERLIN error histogram from Phase 1**
+      — blended with Phase 1 recall; `reports/phase2/injection_weights.md`
+- [x] Run LT over corrupted text → rule IDs + messages (`reports/phase2/lt_rule_survey.md`)
+- [x] Explanation templating (`rules/de.yaml`)
+  - [x] Templates written — 13 keyed on the corruptor, 9 on a LanguageTool rule id
+  - [x] ~~LLM-rewrite the long tail~~ — there is no tail; see the outcome note
+- [x] Negative examples: **22%** correct sentences with empty edit lists — matches the measured
       Falko-MERLIN rate (`reports/phase0/error_type_histogram.md`) ← main defence against overcorrection
-- [ ] Target ~30k examples
+- [x] Target ~30k examples — 30,000 built, 35,062 edits
 
-**Exit criterion:** manually inspect 100 random samples. If >5 have a wrong correction or wrong
-explanation, fix the pipeline before training. Garbage here poisons everything downstream.
+**Exit criterion:** ✅ inspected, three defects found and fixed, rebuilt.
+`reports/phase2/training_set.md`.
+
+> **Outcome: 30,000 examples, and the inspection earned its place in the plan.**
+>
+> The exit criterion is written as a formality — read a hundred samples, fix the pipeline if
+> more than five are wrong. It caught three real defects that every automated invariant
+> passed straight over, because all three produced a *correct* correction with a *wrong*
+> explanation, and the round-trip check cannot see the difference.
+>
+> **Recognising a word class by its shape does not work.** `adjective_form` identified
+> adjectives by their ending and fired on articles, prepositions, quantifiers and once on
+> the modal verb `können` — 22.6% of the time. The lesson is narrower than "use the parser":
+> *listing* a closed class works fine, which is why the article and preposition rules are
+> sound on tokens alone; *inferring* class membership from a suffix does not, because German
+> shares those endings across half the closed-class vocabulary.
+>
+> **`noun_case` was lowercasing proper nouns** one time in five. The correction was right and
+> the example was worthless: English capitalises names too, so no English speaker writes
+> `josef`. It now injects common nouns only.
+>
+> **`drop_comma` explained every comma as separating a subordinate clause.** German commas
+> also go before `sondern`, and around appositions — and the generic case turned out to be
+> the *largest* of the three at 2,844 of 4,614. Now split by what follows the comma.
+>
+> Two findings for later phases. **LanguageTool detects only 63% of what we plant**, and
+> under 10% of preposition errors — so Phase 1's blind spots are its blind spots too, which
+> is the strongest evidence yet for what this project is for. And **the roadmap's "top ~100
+> rule ids" does not exist**: 50 rule ids fired in total and two of them account for 93% of
+> matches, with the dominant one saying only "Möglicher Tippfehler gefunden". The
+> explanations are keyed on our own corruptors instead, which know what they did.
+>
+> One debt: six of the fifteen `reference:` fields in `rules/de.yaml` are `null` because the
+> Rat für deutsche Rechtschreibung paragraph has not been checked. A wrong citation in 30k
+> examples would teach the model to cite confidently and wrongly, so they are omitted rather
+> than guessed. Verify before Phase 3.
 
 ---
 

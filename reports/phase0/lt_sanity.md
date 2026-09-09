@@ -19,5 +19,5 @@ The probes marked *needs n-grams* were chosen by diffing this server against a c
 ## Server log evidence
 
 ```
-(no matching line)
+langlm-languagetool  | languageModel=/ngrams
 ```
