@@ -9,7 +9,7 @@
         corpora data dictionary fertility phase0 \
         overcorrection errant-check baselines phase1 \
         clean-corpus lt-survey weights training-set phase2 \
-        setup-cuda train-data dry-run train phase3 \
+        setup-cuda train-data dry-run train evaluate phase3 \
         clean-ngrams clean-data
 
 PYTHON ?= python
@@ -109,11 +109,12 @@ phase2: clean-corpus lt-survey weights training-set  ## Run the whole of Phase 2
 setup-cuda:  ## Create the `langlm` environment on a CUDA box (no MLX)
 	conda env create -f environment-cuda.yml
 
-train-data:  ## Everything the trainer needs, from a fresh clone
+train-data:  ## Everything the trainer and the evaluation need, from a fresh clone
 	$(PYTHON) scripts/download_falko_merlin.py
 	$(PYTHON) scripts/freeze_splits.py
 	$(PYTHON) scripts/download_leipzig.py
 	$(PYTHON) -c "from langlm.eval.errant_de.spelling import ensure_dictionary; ensure_dictionary()"
+	$(PYTHON) scripts/build_overcorrection_set.py
 	$(PYTHON) scripts/build_clean_corpus.py
 	$(PYTHON) scripts/build_training_set.py
 
@@ -123,8 +124,11 @@ dry-run:  ## Check the loss mask, the schema and one forward pass. Trains nothin
 train:  ## LoRA fine-tune on the Phase 2 training set
 	$(PYTHON) scripts/train_sft.py
 
-phase3: train-data dry-run train  ## Everything Phase 3 needs, in order
-	@echo "Adapter is in checkpoints/phase3-de/"
+evaluate:  ## Score the fine-tuned adapter against the Phase 1 baselines
+	$(PYTHON) scripts/eval_finetuned.py
+
+phase3: train-data dry-run train evaluate  ## Everything Phase 3 needs, in order
+	@echo "Adapter in checkpoints/phase3-de/, results in reports/phase3/"
 
 # --- cleanup ----------------------------------------------------------------
 
