@@ -1,27 +1,27 @@
 #!/usr/bin/env python
-"""Build the Phase 2 training set.
+"""Build the Phase 3 training set: real learner errors, plus synthetic ones.
 
-Takes the frozen clean corpus, damages the configured share of it with the
-configured error mix, explains every edit, and writes the result as JSON lines.
+Iteration 2 of the recipe. The first was synthetic-only and it made the model
+worse than the untrained baseline on 14 of 15 error types -- see
+`reports/phase3/evaluation.md`. Real learner errors are the primary signal now.
 
-Each line is one training example:
+Two sources, mixed:
 
-    {"source": "...",            # what the learner wrote
-     "target": "...",            # what they should have written
+    learner     Falko-MERLIN train. 54 error types, real error density, real
+                negatives. Explanations are type-level, because a Falko edit
+                records what changed and not why.
+    synthetic   Clean text damaged by `langlm.corruptors`. 8 error types, but it
+                knows which rule it broke, so its explanations are specific.
+
+Each line of the output is one training example:
+
+    {"source": "...", "target": "...",
      "edits": [{"start": 3, "end": 4, "error_type": "R:ORTH",
-                "correction": "Hund", "rule": "noun_case",
-                "explanation": "German capitalises every noun ..."}]}
-
-A correct example has an empty edit list, which is the point of it: 22% of them
-say that the right answer is to change nothing.
+                "correction": "Hund", "rule": "noun_case", "source_kind":
+                "synthetic", "explanation": "..."}]}
 
     python scripts/build_training_set.py
     python scripts/build_training_set.py --size 500     # trial
-
-The output is not frozen in the split manifest. It is derived data that a
-config change is supposed to invalidate, not evaluation data whose stability
-matters -- and the manifest exists to make the second kind hard to change by
-accident.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import random
 from collections import Counter
 
 from langlm.config import PROCESSED_DIR, REPORTS_DIR, load_config
-from langlm.data import clean_de, injection
+from langlm.data import clean_de, injection, learner
 from langlm.data.splits import load_split
 from langlm.explanations import TemplateError, explain
 
@@ -42,43 +42,78 @@ REPORT_DIR = REPORTS_DIR / "phase2"
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--size", type=int, default=30000, help="Examples to build")
+    parser.add_argument("--size", type=int, help="Cap both sources, for a trial run")
     parser.add_argument("--samples", type=int, default=100, help="Examples to write out")
     args = parser.parse_args()
 
     config = load_config("phase2")
-    settings = config["injection"]
-    seed = config["clean_corpus"]["seed"]
+    dataset_cfg = config["dataset"]
+    seed = dataset_cfg["seed"]
 
-    clean = load_split(clean_de.CORPUS, "all")[: args.size]
-    print(f"Parsing {len(clean):,} sentences ...")
-    docs = list(parse([s.source for s in clean]))
+    learner_limit = dataset_cfg["learner"]["limit"]
+    synthetic_size = dataset_cfg["synthetic"]["size"]
+    if args.size:
+        learner_limit = args.size
+        synthetic_size = args.size
+
+    print("Reading real learner errors ...")
+    real = [dict(record, source_kind="learner") for record in learner.records(limit=learner_limit)]
+    print(f"  {len(real):,} from Falko-MERLIN {dataset_cfg['learner']['split']}")
+
+    print(f"Generating {synthetic_size:,} synthetic examples ...")
+    synthetic, stats, unexplained = build_synthetic(config, synthetic_size, seed)
+    print(f"  {len(synthetic):,} generated, {unexplained} edits without a template")
+
+    records = real + synthetic
+    random.Random(seed).shuffle(records)
+    for record in records:
+        for edit in record["edits"]:
+            edit["source_kind"] = record["source_kind"]
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUTPUT_DIR / "de.jsonl"
+    with path.open("w", encoding="utf-8") as fh:
+        for record in records:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    print(f"Wrote {path} ({len(records):,} examples)")
+
+    write_report(records, real, synthetic, stats, unexplained, args.samples, seed)
+
+
+def build_synthetic(config: dict, size: int, seed: int):
+    """Corrupt clean sentences and explain the damage."""
+    import spacy
+
+    settings = config["injection"]
+    clean = load_split(clean_de.CORPUS, "all")[:size]
+    nlp = spacy.load("de_core_news_sm", disable=["ner"])
+    docs = list(nlp.pipe([s.source for s in clean], batch_size=64))
 
     stats = injection.InjectionStats()
-    examples = list(
-        injection.generate(
-            [s.source_tokens for s in clean],
-            weights=settings["weights"],
-            seed=seed,
-            errors=tuple(settings["errors_per_sentence"]),
-            stats=stats,
-            docs=docs,
-        )
+    generated = injection.generate(
+        [s.source_tokens for s in clean],
+        weights=settings["weights"],
+        seed=seed,
+        errors=tuple(settings["errors_per_sentence"]),
+        stats=stats,
+        docs=docs,
     )
 
-    records, types, rules, unexplained = [], Counter(), Counter(), 0
-    for example, source in zip(examples, clean, strict=True):
-        record = {"source": example.source, "target": source.source, "edits": []}
+    records, unexplained = [], 0
+    for example, source in zip(generated, clean, strict=True):
+        record = {
+            "source": example.source,
+            "target": source.source,
+            "edits": [],
+            "source_kind": "synthetic",
+        }
         for edit in example.edits:
             if edit.is_noop:
                 continue
-            # The corruptor's own name, put here by `apply`.
-            corruption_rule = edit.comment
-            types[edit.error_type] += 1
-            rules[corruption_rule] += 1
+            rule = edit.comment
             try:
                 text = explain(
-                    corruption_rule,
+                    rule,
                     wrong=" ".join(example.source_tokens[edit.start : edit.end]),
                     right=edit.correction,
                 )
@@ -91,43 +126,38 @@ def main() -> None:
                     "end": edit.end,
                     "error_type": edit.error_type,
                     "correction": edit.correction,
-                    "rule": corruption_rule,
+                    "rule": rule,
                     "explanation": text,
                 }
             )
         records.append(record)
-
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUTPUT_DIR / "de.jsonl"
-    with path.open("w", encoding="utf-8") as fh:
-        for record in records:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-    print(f"Wrote {path} ({len(records):,} examples)")
-
-    check(records, stats, types, rules, unexplained, args.samples, seed)
+    return records, stats, unexplained
 
 
-def parse(texts: list[str]):
-    """Parse every sentence, so the word-order rules have something to work with."""
-    import spacy
-
-    nlp = spacy.load("de_core_news_sm", disable=["ner"])
-    return nlp.pipe(texts, batch_size=64)
-
-
-def check(records, stats, types, rules, unexplained, samples: int, seed: int) -> None:
+def write_report(records, real, synthetic, stats, unexplained, samples: int, seed: int) -> None:
     """Verify the invariants and write the sample the exit criterion asks for."""
     damaged = [r for r in records if r["edits"]]
     correct = [r for r in records if not r["edits"]]
-
     broken = [r for r in damaged if r["source"] == r["target"]]
-    missing = [r for r in damaged for e in r["edits"] if not e["explanation"]]
+    missing = [e for r in damaged for e in r["edits"] if not e["explanation"]]
+
+    per_sentence = Counter(len(r["edits"]) for r in records)
+    total = len(records)
+    types = Counter(e["error_type"] for r in records for e in r["edits"])
+    kinds = Counter(r["source_kind"] for r in records)
+    edit_kinds = Counter(e["source_kind"] for r in records for e in r["edits"])
 
     lines = [
         "# Phase 2: the training set",
         "",
-        f"{len(records):,} examples: {len(damaged):,} carrying errors and "
-        f"{len(correct):,} already correct ({len(correct) / len(records):.1%}).",
+        f"{total:,} examples: **{kinds['learner']:,} real** learner sentences from "
+        f"Falko-MERLIN train and **{kinds['synthetic']:,} synthetic** ones. "
+        f"{len(correct):,} need no correction ({len(correct) / total:.1%}).",
+        "",
+        "Iteration 2 of the recipe. The first was synthetic-only and made the model worse "
+        "than the untrained baseline on 14 of 15 error types "
+        "(`reports/phase3/evaluation.md`), so real learner errors are the primary signal "
+        "now and the corruptors are the supporting one.",
         "",
         "## Invariants",
         "",
@@ -135,23 +165,49 @@ def check(records, stats, types, rules, unexplained, samples: int, seed: int) ->
         "|---|---|",
         f"| Damaged examples whose source equals their target | {len(broken)} |",
         f"| Edits with no explanation | {len(missing)} |",
-        f"| Edits whose corruptor could not be identified | {unexplained} |",
-        f"| Sentences no rule could damage (kept as correct) | {stats.barren:,} |",
+        f"| Synthetic edits with no template | {unexplained} |",
+        f"| Sentences no corruptor could damage | {stats.barren:,} |",
         "",
-        "The first two must be zero. A damaged example identical to its target "
-        "teaches the model to change nothing when something is wrong; an edit with no "
-        "explanation is the half of this project that is not a grammar checker.",
+        "## Error density",
         "",
-        "## Injected mix",
+        "The number iteration 1 got wrong: it produced nothing with three or more errors, "
+        "and 39% of real learner sentences have them.",
+        "",
+        "| Edits in a sentence | Share | Falko train |",
+        "|---|---:|---:|",
+    ]
+    reference = {0: 0.221, 1: 0.212, 2: 0.175}
+    for count in (0, 1, 2):
+        lines.append(f"| {count} | {per_sentence[count] / total:.1%} | {reference[count]:.1%} |")
+    three_plus = sum(v for k, v in per_sentence.items() if k >= 3)
+    lines += [
+        f"| 3 or more | {three_plus / total:.1%} | 39.2% |",
+        "",
+        f"Mean edits per sentence: **{sum(types.values()) / total:.2f}** "
+        f"(Falko train: 2.55, iteration 1: 1.17).",
+        "",
+        "## Error types",
+        "",
+        f"**{len(types)}** distinct types, against 8 in iteration 1 and 54 in Falko train.",
         "",
         "| Error type | Count | Share |",
         "|---|---:|---:|",
     ]
-    total = sum(types.values())
-    for error_type, count in types.most_common():
-        lines.append(f"| `{error_type}` | {count:,} | {count / total:.1%} |")
+    edit_total = sum(types.values())
+    for error_type, count in types.most_common(20):
+        lines.append(f"| `{error_type}` | {count:,} | {count / edit_total:.1%} |")
 
     lines += [
+        "",
+        "## Explanations",
+        "",
+        f"{edit_kinds['synthetic']:,} edits carry a rule-level explanation, from the "
+        f"corruptor that made them. {edit_kinds['learner']:,} carry a type-level one, "
+        "because a Falko edit records what the annotator changed and not why.",
+        "",
+        "That split is the point of the mix: the real data covers all the error types and "
+        "teaches what learner German looks like, and the synthetic data teaches how to "
+        "explain the eight it can produce properly.",
         "",
         "## 100 samples",
         "",
@@ -160,9 +216,12 @@ def check(records, stats, types, rules, unexplained, samples: int, seed: int) ->
         "",
     ]
     for index, record in enumerate(random.Random(seed).sample(damaged, min(samples, len(damaged)))):
-        lines += [f"**{index + 1}.** `{record['source']}`", f"→ `{record['target']}`"]
+        lines += [
+            f"**{index + 1}.** *({record['source_kind']})* `{record['source']}`",
+            f"→ `{record['target']}`",
+        ]
         for edit in record["edits"]:
-            lines.append(f"  - *{edit['error_type']}* ({edit['rule']}): {edit['explanation']}")
+            lines.append(f"  - *{edit['error_type']}*: {edit['explanation']}")
         lines.append("")
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -170,8 +229,9 @@ def check(records, stats, types, rules, unexplained, samples: int, seed: int) ->
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {output}")
     print(
-        f"  correct share {len(correct) / len(records):.1%}, broken {len(broken)}, "
-        f"unexplained {unexplained}"
+        f"  {kinds['learner']:,} real + {kinds['synthetic']:,} synthetic | "
+        f"{len(types)} types | mean {edit_total / total:.2f} edits | "
+        f"{len(correct) / total:.1%} correct | broken {len(broken)}"
     )
 
 

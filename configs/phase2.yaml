@@ -35,9 +35,18 @@ clean_corpus:
 # they are above their corpus-wide share; types no rule injects -- verb
 # morphology, missing pronouns -- are absent and their share is redistributed.
 injection:
-  # How many errors to put in one sentence, sampled inclusively. Most learner
-  # sentences in Falko-MERLIN carry one or two.
-  errors_per_sentence: [1, 2]
+  # How many errors to put in one sentence, sampled inclusively.
+  #
+  # This was [1, 2] in iteration 1, on the reasoning that most learner sentences
+  # carry one or two errors. That was wrong, and measurably so: 39.2% of
+  # Falko-MERLIN sentences carry three or more, and a corpus with a hard ceiling
+  # of two produced none of them at all. The model never saw a sentence where a
+  # third of the words were wrong, which is what an A2 sentence looks like, and
+  # its recall showed it.
+  #
+  # [1, 4] puts the synthetic half's density alongside the real half's instead
+  # of dragging the blend down.
+  errors_per_sentence: [1, 4]
   weights:
     R:SPELL: 0.2076
     R:DET:FORM: 0.1684
@@ -72,3 +81,31 @@ languagetool:
     # tokenisation puts before punctuation, not about anything we injected.
     - LEERZEICHEN_NACH_VOR_ANFUEHRUNGSZEICHEN
     - LEERZEICHEN_VOR_AUSRUFEZEICHEN_ETC
+
+# --- the training set --------------------------------------------------------
+# Iteration 2. The first recipe was synthetic-only and it made the model worse
+# than the untrained baseline on 14 of 15 error types -- spelling recall fell
+# from 0.49 to 0.12 on the type it saw most of. See reports/phase3/evaluation.md.
+#
+# So real learner errors are the primary signal now and the corruptors are the
+# supporting one. Falko-MERLIN train has 54 error types, 2.55 edits a sentence,
+# and 39% of sentences carrying three or more; the synthetic corpus had 8 types,
+# 1.17 edits, and none with three. It also brings its own negatives -- 22.1% of
+# its sentences need no correction, which is where that ratio was measured in
+# the first place.
+#
+# The synthetic share stays because it is the only source of rule-level
+# explanations: it knows *which* rule it broke, where a Falko edit knows only
+# its ERRANT type. Real data teaches what learner German looks like; synthetic
+# data teaches how to explain it.
+dataset:
+  learner:
+    # `train` only. Dev is the evaluation set, test is frozen, and
+    # `langlm.data.learner` refuses either rather than trusting this field.
+    split: train
+    limit: null        # null means all 19,237
+  synthetic:
+    # A minority share. Enough to teach the explanation style, not enough to
+    # reimpose the failure mode of iteration 1.
+    size: 10000
+  seed: 20260909

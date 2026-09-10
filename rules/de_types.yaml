@@ -1,0 +1,120 @@
+# Explanations keyed on the ERRANT error type.
+#
+# These are for *real* learner errors, from Falko-MERLIN, where all we know is
+# the type the annotator assigned. That is less than we know about our own
+# injected errors -- there we know which rule was broken and can say why -- so
+# these are necessarily more general. `rules/de.yaml` stays the specific one.
+#
+# The division of labour is deliberate. Real data covers all 54 types and teaches
+# the model what learner German actually looks like; synthetic data covers 8
+# types and teaches it to explain them properly. Neither alone is the corpus.
+#
+# Placeholders: {wrong} is what the learner wrote, {right} the correction,
+# {category} the word class from the type tag.
+
+# --- hand-written, for the types that carry the volume ----------------------
+# Down to roughly 1% of edits. Everything below that is composed from the parts
+# at the bottom of this file, which keeps the tail consistent rather than
+# lovingly uneven.
+explicit:
+  R:SPELL: >-
+    «{wrong}» is not spelled correctly. It should be «{right}».
+  R:DET:FORM: >-
+    The article has to match its noun in gender, case and number. Here that
+    makes it «{right}», not «{wrong}».
+  M:PUNCT: >-
+    A punctuation mark is missing here. German punctuates by rule rather than by
+    ear, and this sentence needs «{right}».
+  R:OTHER: >-
+    «{wrong}» is not the right word here. German uses «{right}» in this context.
+  # Deliberately does not name a cause. R:ORTH covers capitalisation, compound
+  # spacing and hyphenation, and the type does not say which -- so the earlier
+  # version's "German capitalises nouns, and compounds are written as one word"
+  # was appended to every one of them, including the ones it did not describe.
+  R:ORTH: >-
+    This is a convention of written German rather than a grammar rule. The
+    correct written form here is «{right}».
+  R:ADJ:FORM: >-
+    An adjective before a noun takes an ending that depends on the noun's
+    gender, case and number, and on the article in front of it. It should read
+    «{right}».
+  R:NOUN:FORM: >-
+    The noun is in the wrong form. German marks case and number on the noun
+    itself, so it should be «{right}».
+  U:PUNCT: >-
+    This punctuation mark does not belong here. German does not separate these
+    parts of a sentence.
+  R:ADP: >-
+    German prepositions are not chosen by translating the English one. This
+    phrase takes «{right}» rather than «{wrong}».
+  M:DET: >-
+    A German noun almost always needs an article, even where English drops it.
+    Add «{right}».
+  R:MORPH: >-
+    «{right}» is built from the same stem as «{wrong}» but is the form this
+    sentence needs -- a different ending, or a different part of speech.
+  R:WO: >-
+    The word order is wrong. German fixes the position of the verb: second in a
+    main clause, last in a subordinate one. It should read «{right}».
+  M:PRON: >-
+    A pronoun is missing. German does not leave out the subject the way some
+    languages do, so «{right}» is needed here.
+  R:VERB:FORM: >-
+    The verb is in the wrong form. Check the tense, the person, and whether this
+    clause needs an infinitive or a participle. It should be «{right}».
+  R:PUNCT: >-
+    The wrong punctuation mark is used here. It should be «{right}».
+  M:AUX: >-
+    An auxiliary verb is missing. German builds its perfect and passive with
+    «haben», «sein» or «werden», and this sentence needs «{right}».
+  R:AUX:FORM: >-
+    The auxiliary is in the wrong form. It should be «{right}».
+  U:AUX: >-
+    This auxiliary verb is not needed here. Remove «{wrong}».
+  M:ADP: >-
+    A preposition is missing. This construction needs «{right}».
+  U:PRON: >-
+    This pronoun is not needed. German does not repeat it here, so remove
+    «{wrong}».
+
+# --- composed, for the tail --------------------------------------------------
+categories:
+  DET: article
+  ADP: preposition
+  PRON: pronoun
+  NOUN: noun
+  PNOUN: proper name
+  VERB: verb
+  AUX: auxiliary verb
+  ADJ: adjective
+  ADV: adverb
+  PART: particle
+  CONJ: conjunction
+  SCONJ: subordinating conjunction
+  PUNCT: punctuation mark
+  OTHER: word
+
+operations:
+  M: >-
+    A {category} is missing here. Add «{right}».
+  R: >-
+    «{wrong}» is not the right {category} here. Use «{right}».
+  U: >-
+    The {category} «{wrong}» does not belong here. Remove it.
+  # `:FORM` types are about inflection rather than choice, which is a different
+  # thing to tell a learner: the word is right and its ending is not.
+  R:FORM: >-
+    The {category} «{wrong}» is in the wrong form. It should be «{right}».
+
+# A move -- the same word deleted in one place and inserted in another --
+# reaches us as two edits, because that is how ERRANT represents it. Explained
+# separately they read as "remove this" followed by "add this back", which is
+# not advice. Both edits of a pair get this instead.
+move: >-
+  «{word}» is in the wrong place in this sentence. German fixes word order more
+  tightly than English does, so it has to move rather than stay where it is.
+
+#: Used when the type is unrecognisable -- ERRANT emits `R:*` for a handful of
+#: edits it cannot classify. Saying nothing specific is better than guessing.
+fallback: >-
+  This needs to be «{right}» rather than «{wrong}».

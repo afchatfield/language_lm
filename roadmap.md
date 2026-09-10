@@ -158,14 +158,39 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 ## Phase 3 — German SFT
 *~1 week*
 
-- [ ] LoRA config: r=32, alpha=64, all linear layers, lr 1e-4, cosine, 2–3 epochs
-- [ ] **Verify loss masking on the prompt** before launching anything long
-- [ ] Structured JSON output schema (span-based edits)
-- [ ] Constrained decoding at inference (GBNF / Outlines / XGrammar)
+- [x] LoRA config: r=32, alpha=64, all linear layers, lr 1e-4, cosine, 2–3 epochs
+- [x] **Verify loss masking on the prompt** before launching anything long
+      — printed by every run, and pinned by `tests/test_train_format.py`
+- [x] Structured JSON output schema (span-based edits)
+- [x] ~~Constrained decoding at inference~~ — **not needed.** The model emitted
+      1 invalid JSON in 2,903 answers and 0 overlapping spans. The schema was
+      the easy half.
 - [ ] Evaluate → read per-error-type breakdown → fix data in Phase 2 → retrain
-  - [ ] Iteration 1
-  - [ ] Iteration 2
+  - [x] Iteration 1 — synthetic-only data. **F0.5 0.1891**, worse than the
+        untrained baseline on 14 of 15 error types. See the outcome note.
+  - [ ] Iteration 2 — real learner errors as the primary signal
   - [ ] Iteration 3
+
+> **Iteration 1: the synthetic corpus made the model worse.** F0.5 0.1891 against
+> few-shot's 0.5102 and zero-shot's 0.2571 — precision 0.25, so three edits in four
+> were wrong. Recall fell on 14 of 15 error types; `M:DET` (+0.04) was the only gain.
+>
+> **Injection share did not predict improvement.** `R:SPELL` took the largest share of
+> the corpus at 25.1% and lost the most recall, 0.49 → 0.12. `R:WO` had 8.0% and went
+> 0.09 → 0.00. The Phase 2 blend — over-sample the types the baseline is blind to —
+> was measured and it does not work.
+>
+> **The cause was the shape of the data, not its error mix.** Our inputs were pristine
+> news German carrying one or two surgical errors. Falko sentences average 2.55 edits
+> and 39% carry three or more; the synthetic corpus averaged 1.17 and contained *none*
+> with three, because `errors_per_sentence` was capped at 2. The model learned to find
+> a mechanical corruption sitting in otherwise-perfect prose, and overwrote the German
+> competence the base model already had — which is where few-shot's 0.49 on spelling
+> came from.
+>
+> **Falko-MERLIN train had been sitting unused the whole time**: 19,237 real annotated
+> sentences, 54 error types, real density, real negatives. It had only ever been read
+> to draw few-shot prompt examples.
 
 *Expect 2–4 loops. Quality comes from data iteration, not hyperparameter search.*
 

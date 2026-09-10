@@ -77,6 +77,51 @@ def explain(
     return text
 
 
+@cache
+def load_types(language: str = "de", root: Path = RULES_DIR) -> dict:
+    """The error-type template file for a language."""
+    path = Path(root) / f"{language}_types.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"No error-type templates at {path}.")
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def explain_type(
+    error_type: str,
+    wrong: str,
+    right: str,
+    language: str = "de",
+) -> str:
+    """Explain an edit when all we know is its ERRANT type.
+
+    This is the real-data path. A Falko-MERLIN edit carries a type and nothing
+    else -- no record of which rule the learner broke -- so the explanation can
+    only be as specific as the type is. `explain` stays the better one, and is
+    used wherever the corruptor is known.
+
+    Types are compositional: an operation (`M` missing, `R` replaced, `U`
+    unnecessary), a word class, and optionally `:FORM` for an inflection rather
+    than a choice. The types carrying real volume are written out by hand; the
+    tail is composed from those parts, which keeps 54 types consistent instead
+    of unevenly hand-written.
+    """
+    templates = load_types(language)
+
+    explicit = templates["explicit"].get(error_type)
+    if explicit:
+        return explicit.format(wrong=wrong, right=right).strip()
+
+    parts = error_type.split(":")
+    operation, category_key = (parts[0], parts[1]) if len(parts) > 1 else ("R", "OTHER")
+    category = templates["categories"].get(category_key)
+    if category is None:
+        return templates["fallback"].format(wrong=wrong, right=right).strip()
+
+    key = "R:FORM" if len(parts) > 2 and parts[2] == "FORM" else operation
+    template = templates["operations"].get(key) or templates["operations"]["R"]
+    return template.format(wrong=wrong, right=right, category=category).strip()
+
+
 def coverage(rules: list[str], language: str = "de") -> list[str]:
     """Which of the given corruptors have no template. Empty is the healthy answer."""
     templates = load(language)["corruptors"]
