@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -112,17 +113,39 @@ def freeze_splits(
     return entry
 
 
-def verify_manifest(manifest_path: Path = SPLIT_MANIFEST) -> None:
-    """Re-hash every frozen split and raise if anything has drifted.
+def verify_manifest(
+    manifest_path: Path = SPLIT_MANIFEST,
+    corpora: Iterable[str] | None = None,
+) -> None:
+    """Re-hash frozen splits and raise if anything has drifted.
+
+    Args:
+        manifest_path: Manifest location; overridable for tests.
+        corpora: Which corpora to check. ``None`` checks all of them, which is
+            right for a full-pipeline check but wrong mid-pipeline: the manifest
+            spans several phases, and a script that has only rebuilt its own
+            corpus should not assert that the artefacts of later phases already
+            exist. Each build script therefore names the corpus it owns.
 
     Raises:
-        ManifestError: if the manifest is missing, a file is gone, or a hash
-            no longer matches.
+        ManifestError: if the manifest is missing, a named corpus is not frozen,
+            a file is gone, or a hash no longer matches.
     """
     manifest = _read_manifest(manifest_path)
+    entries = manifest["corpora"]
+
+    if corpora is not None:
+        wanted = list(corpora)
+        if unknown := [c for c in wanted if c not in entries]:
+            raise ManifestError(
+                f"Not frozen in {manifest_path}: {', '.join(sorted(unknown))}. "
+                f"Known: {_known_splits(manifest)}"
+            )
+        entries = {c: entries[c] for c in wanted}
+
     problems: list[str] = []
 
-    for corpus, entry in sorted(manifest["corpora"].items()):
+    for corpus, entry in sorted(entries.items()):
         for split, record in sorted(entry["splits"].items()):
             path = PROJECT_ROOT / record["path"]
             if not path.exists():

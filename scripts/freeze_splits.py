@@ -55,7 +55,7 @@ def main() -> None:
     except ManifestError as exc:
         print(f"Already frozen: {exc}")
 
-    verify_manifest()
+    verify_manifest(corpora=[falko_merlin.CORPUS])
     print("Manifest verified.")
 
     write_histogram()

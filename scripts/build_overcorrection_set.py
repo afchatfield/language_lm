@@ -55,7 +55,7 @@ def main() -> None:
         print(f"Froze {overcorrection.CORPUS} in {SPLIT_MANIFEST}")
     except ManifestError as exc:
         print(f"Already frozen: {exc}")
-    verify_manifest()
+    verify_manifest(corpora=[overcorrection.CORPUS])
     print("Manifest verified.")
 
     print("\nFirst five sentences:")
