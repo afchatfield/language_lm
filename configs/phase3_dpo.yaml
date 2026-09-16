@@ -1,0 +1,61 @@
+# Phase 3, iteration 6: preference training on the model's own beam.
+#
+# Separate from `phase3.yaml` because almost nothing carries over. The SFT run
+# starts from a base model that cannot do the task and has 30k examples to teach
+# it; this one starts from the best model the project has and has a few thousand
+# pairs whose two sides differ by one or two words. The settings that suit the
+# first are the ones most likely to destroy the second.
+#
+# The model, LoRA rank and target modules are not repeated here -- the adapter
+# being trained already has them, and `scripts/train_dpo.py` continues it rather
+# than building a new one. Only the base `model:` block is read from phase3.yaml.
+
+training:
+  # One pass. The pairs are on-policy for the checkpoint that generated them and
+  # stop being so the moment the policy moves, so a second epoch is training on
+  # preferences the model no longer holds.
+  epochs: 1
+
+  # A tenth of the SFT rate. The starting point is already the best model in the
+  # project and the failure mode here is not underfitting -- it is walking the
+  # policy off a 0.7072 that four iterations paid for.
+  learning_rate: 1.0e-5
+  lr_scheduler: cosine
+  warmup_ratio: 0.1
+  weight_decay: 0.0
+
+  # KL strength. At 0.1 the policy is held fairly close to the reference, which
+  # is the SFT adapter itself -- see the module docstring in train_dpo.py for why
+  # the reference is that and not the base model. Worth a sweep if the first run
+  # moves nothing: too high and the pairs cannot teach, too low and the model
+  # drifts into whatever the preference data does not constrain.
+  beta: 0.1
+
+  # DPO runs a forward pass over chosen and rejected, and again under the
+  # reference, so a step costs roughly four times an SFT step of the same shape.
+  batch_size: 8
+  gradient_accumulation: 4
+
+  # The completion stops at the `changes` marker, so these sequences are far
+  # shorter than the SFT ones -- the cap is here to catch a pathological prompt,
+  # not to shape the data.
+  max_length: 1024
+  # Which end is cut if a pair is longer than the cap. The completion is what
+  # the preference is expressed over, so the prompt gives way first. trl 1.12
+  # removed the separate `max_prompt_length`, which is why this is a mode rather
+  # than a second number.
+  truncation_mode: keep_end
+
+  # Same seed as the SFT runs, so the split is drawn the same way.
+  seed: 20260909
+  # Pairs held out to watch the preference accuracy during the run. The number
+  # that decides anything is still Falko-MERLIN dev, scored the same way every
+  # other row in the table was.
+  validation_size: 300
+  logging_steps: 10
+  eval_steps: 50
+  save_steps: 100
+  save_total_limit: 4
+
+output:
+  adapter_dir: checkpoints/phase3-de-dpo

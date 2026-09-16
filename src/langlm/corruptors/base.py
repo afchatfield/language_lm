@@ -50,6 +50,11 @@ class Corruption:
     def is_deletion(self) -> bool:
         return not self.replacement
 
+    @property
+    def is_insertion(self) -> bool:
+        """True when this adds text without consuming any of the original."""
+        return self.start == self.end
+
     def damaged_tokens(self, tokens: Sequence[str]) -> list[str]:
         """The correct sentence, with this corruption applied."""
         replacement = self.replacement.split() if self.replacement else []
@@ -142,10 +147,17 @@ def apply(tokens: Sequence[str], corruptions: Sequence[Corruption]) -> M2Sentenc
         ValueError: if two corruptions overlap, which would make the edit
             offsets meaningless rather than merely wrong.
     """
-    ordered = sorted(corruptions, key=lambda c: c.start)
+    # Sorted by end as well as by start, so that an insertion at position p
+    # comes before a replacement of the token at p rather than after it. Both
+    # orders describe the same damaged sentence, but only this one can be walked
+    # with a single cursor -- the other reads as an overlap and was raising on a
+    # pair of corruptions that do not in fact conflict.
+    ordered = sorted(corruptions, key=lambda c: (c.start, c.end))
     for earlier, later in itertools.pairwise(ordered):
         if earlier.end > later.start:
             raise ValueError(f"Overlapping corruptions: {earlier} and {later}.")
+        if earlier.start == later.start and earlier.is_insertion and later.is_insertion:
+            raise ValueError(f"Two insertions at the same point: {earlier} and {later}.")
 
     damaged: list[str] = []
     edits: list[Edit] = []
@@ -164,8 +176,8 @@ def apply(tokens: Sequence[str], corruptions: Sequence[Corruption]) -> M2Sentenc
                 # Which rule did this, carried in the M2 comment field because
                 # that is the one place the format has for it. The explanation
                 # needs it and the error type cannot supply it: `R:SPELL` is
-                # shared by the umlaut, ß, das/dass and keyboard rules, which
-                # want four different explanations.
+                # shared by the umlaut, ß and keyboard rules, which want three
+                # different explanations.
                 comment=corruption.rule,
             )
         )
@@ -235,5 +247,14 @@ def choose(
         scores = [_score(t, weights, emitted) for t in types]
         pick = rng.choice(by_type[rng.choices(types, weights=scores, k=1)[0]])
         chosen.append(pick)
-        remaining = [c for c in remaining if c.end <= pick.start or c.start >= pick.end]
+        # An insertion consumes no tokens, so the span test alone would let a
+        # second one be picked at the same point and produce `, ,` in the
+        # damaged sentence. Two corruptions at one insertion point are
+        # alternative ways to damage it, not a pair to apply together.
+        remaining = [
+            c
+            for c in remaining
+            if (c.end <= pick.start or c.start >= pick.end)
+            and not (c.is_insertion and pick.is_insertion and c.start == pick.start)
+        ]
     return sorted(chosen, key=lambda c: c.start)

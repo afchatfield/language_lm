@@ -42,13 +42,18 @@ REPORT_DIR = REPORTS_DIR / "phase2"
 def injectable_types() -> set[str]:
     """Error types the German corruptors can actually produce.
 
-    Derived by running every rule over a sentence built to offer all of them
-    something, rather than listed by hand -- a list would go stale the first
-    time a rule was added.
+    Derived by running every rule over sentences built to offer them something,
+    rather than listed by hand -- a list would go stale the first time a rule was
+    added. The probes are the part that can still go stale, so a rule that none
+    of them exercises is an error rather than a silent omission: a type missing
+    from here gets no weight, and a corruptor with no weight is one that was
+    written and then never fired.
     """
     import spacy
 
-    # Parsed, because two rules produce nothing without one and a probe that
+    from langlm.corruptors import REGISTRY
+
+    # Parsed, because most rules produce nothing without one and a probe that
     # skipped them would silently leave word order out of the weights -- the
     # very type Phase 1 found the baseline worst at.
     nlp = spacy.load("de_core_news_sm", disable=["ner"])
@@ -56,11 +61,27 @@ def injectable_types() -> set[str]:
         "Der Lehrer hat gesagt , dass die Schüler mit großer Mühe die Aufgaben lösen .",
         "Der Zug fährt um acht Uhr ab .",
         "Ich sehe den großen Hund in dem Garten .",
+        "Gestern ging er mit den Kindern und Eltern ins Kino .",
+        "Er interessiert sich für den Preis des Hauses und wartet auf mich .",
+        "Sie ist gestern nach Hause gefahren , weil sie das Buch vergessen hat .",
+        "Wir kaufen Brot und Butter , und sie bezahlt mit einer Karte .",
     ]
     types: set[str] = set()
+    fired: set[str] = set()
     for probe in probes:
         tokens = probe.split()
-        types |= {c.error_type for c in propose(tokens, doc=nlp(probe))}
+        for corruption in propose(tokens, doc=nlp(probe)):
+            types.add(corruption.error_type)
+            fired.add(corruption.rule)
+    # `drop_comma` names its corruptions after the comma rule that was broken.
+    silent = set(REGISTRY) - {rule.split("_subordinate")[0] for rule in fired} - fired
+    silent -= {"drop_comma"} if any(f.startswith("drop_comma") for f in fired) else set()
+    if silent:
+        raise SystemExit(
+            f"No probe sentence exercises {', '.join(sorted(silent))}. Add one to "
+            f"`injectable_types`, or these rules will be left out of the weights and "
+            f"so out of the corpus."
+        )
     return types
 
 
@@ -76,28 +97,46 @@ def natural_rates() -> dict[str, float]:
     return {error_type: count / total for error_type, count in counts.items()}
 
 
-def baseline_recall() -> dict[str, float]:
-    """Per-type recall of the Phase 1 few-shot baseline, recomputed from its output."""
+def baseline_recall() -> tuple[dict[str, float], str]:
+    """Per-type recall of the best system on disk, recomputed from its output.
+
+    The boost exists to spend the corpus on what the model cannot do, so it has
+    to be read off the model that is actually being improved. That was the
+    Phase 1 few-shot baseline when there was nothing else; once an adapter has
+    been evaluated, its own dev output is the honest source, and using the
+    prompted baseline instead would keep boosting types the fine-tuned model has
+    since learned. Whichever is used is named in the report.
+
+    Returns:
+        Per-type recall, and the name of the system it came from.
+    """
     from langlm.config import INTERIM_DIR
 
     dev = load_split("falko_merlin", "dev")
-    path = INTERIM_DIR / "phase1" / f"few-shot.dev.{len(dev)}.txt"
-    if not path.exists():
+    candidates = [
+        ("fine-tuned", INTERIM_DIR / "phase3" / f"fine-tuned.dev.{len(dev)}.txt"),
+        ("few-shot", INTERIM_DIR / "phase1" / f"few-shot.dev.{len(dev)}.txt"),
+    ]
+    found = next(((name, path) for name, path in candidates if path.exists()), None)
+    if found is None:
         raise FileNotFoundError(
-            f"{path} is missing. Run `make baselines` first: the boost is derived from "
-            f"what the Phase 1 baseline could not do."
+            f"No system output to read the boost from. Looked for "
+            f"{', '.join(str(path) for _, path in candidates)}. Run `make baselines` "
+            f"or `make evaluate` first: the boost is derived from what the model "
+            f"could not do."
         )
+    name, path = found
     hypotheses = path.read_text(encoding="utf-8").splitlines()
     annotated = errant_de.annotate_corpus([s.source for s in dev], hypotheses)
     scored = span_scorer.score(dev, annotated, beta=0.5, mode="correction")
-    return {error_type: counts.recall for error_type, counts in scored.by_type.items()}
+    return {error_type: counts.recall for error_type, counts in scored.by_type.items()}, name
 
 
 def main() -> None:
     config = load_config("phase2")
     types = injectable_types()
     natural = natural_rates()
-    recall = baseline_recall()
+    recall, measured_on = baseline_recall()
 
     rows = []
     for error_type in sorted(types):
@@ -112,11 +151,11 @@ def main() -> None:
     lines = [
         "# Phase 2: the injected error distribution",
         "",
-        f"Natural rates are Falko-MERLIN train + dev. Recall is the Phase 1 few-shot "
-        f"baseline, recomputed from its saved output. A type the baseline recovers at "
+        f"Natural rates are Falko-MERLIN train + dev. Recall is the **{measured_on}** "
+        f"system, recomputed from its saved dev output. A type it recovers at "
         f"{BLIND:.2f} or less is weighted up {BOOST:g}x.",
         "",
-        "| Error type | Natural | Few-shot recall | Boost | Injected |",
+        f"| Error type | Natural | {measured_on} recall | Boost | Injected |",
         "|---|---:|---:|---:|---:|",
     ]
     for error_type, rate, got, boost, _ in sorted(rows, key=lambda r: -weights[r[0]]):
@@ -129,13 +168,22 @@ def main() -> None:
     boosted = [row[0] for row in rows if row[3] > 1]
     lines += [
         "",
-        f"Boosted: {', '.join(f'`{t}`' for t in boosted) or 'none'}. These are the types "
-        "the prompted baseline barely touches, so an example of one buys more than an "
-        "example of a type it already handles.",
+        (
+            f"Boosted: {', '.join(f'`{t}`' for t in boosted)}. These are the types the "
+            f"{measured_on} system barely touches, so an example of one buys more than an "
+            f"example of a type it already handles."
+            if boosted
+            else f"Boosted: none. Nothing the corruptors produce falls under the "
+            f"{BLIND:.2f} recall the boost is for -- the {measured_on} system's weakest "
+            f"injectable type is at {min(r[2] for r in rows if r[2] is not None):.2f}. The "
+            f"boost was calibrated against a prompted baseline that scored 0.04 on "
+            f"prepositions; a model that is no longer blind anywhere should be trained on "
+            f"the distribution learners actually produce, which is what these weights are."
+        ),
         "",
         "Rates are renormalised over the types the corruptors can produce, so they do "
-        "not match the corpus-wide histogram directly: types no rule injects -- verb "
-        "morphology, word order -- are absent here and their share is redistributed.",
+        "not match the corpus-wide histogram directly: types no rule injects are absent "
+        "here and their share is redistributed.",
         "",
         "## The block for `configs/phase2.yaml`",
         "",

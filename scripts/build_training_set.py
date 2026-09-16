@@ -5,13 +5,19 @@ Iteration 2 of the recipe. The first was synthetic-only and it made the model
 worse than the untrained baseline on 14 of 15 error types -- see
 `reports/phase3/evaluation.md`. Real learner errors are the primary signal now.
 
-Two sources, mixed:
+Three sources, mixed:
 
     learner     Falko-MERLIN train. 54 error types, real error density, real
                 negatives. Explanations are type-level, because a Falko edit
                 records what changed and not why.
-    synthetic   Clean text damaged by `langlm.corruptors`. 8 error types, but it
+    synthetic   Clean text damaged by `langlm.corruptors`. 17 error types, but it
                 knows which rule it broke, so its explanations are specific.
+    backtranslation
+                Clean text damaged by a model trained on Falko read backwards
+                (`langlm.data.backtranslate`). It reaches the error types no
+                rule can write -- lexical choice above all -- and its
+                explanations are type-level for the same reason the learner
+                half's are. Iteration 5; see `reports/phase3/headroom.md`.
 
 Each line of the output is one training example:
 
@@ -30,9 +36,10 @@ import argparse
 import json
 import random
 from collections import Counter
+from pathlib import Path
 
 from langlm.config import PROCESSED_DIR, REPORTS_DIR, load_config
-from langlm.data import clean_de, injection, learner
+from langlm.data import backtranslate, clean_de, injection, learner
 from langlm.data.splits import load_split
 from langlm.explanations import TemplateError, explain
 
@@ -44,6 +51,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", type=int, help="Cap both sources, for a trial run")
     parser.add_argument("--samples", type=int, default=100, help="Examples to write out")
+    parser.add_argument(
+        "--backtranslation",
+        help="Kept pairs from `scripts/generate_backtranslation.py`. Defaults to the "
+        "configured path; pass an empty string to build the corpus without them.",
+    )
     args = parser.parse_args()
 
     config = load_config("phase2")
@@ -64,7 +76,9 @@ def main() -> None:
     synthetic, stats, unexplained = build_synthetic(config, synthetic_size, seed)
     print(f"  {len(synthetic):,} generated, {unexplained} edits without a template")
 
-    records = real + synthetic
+    generated = build_backtranslated(dataset_cfg, args.backtranslation)
+
+    records = real + synthetic + generated
     random.Random(seed).shuffle(records)
     for record in records:
         for edit in record["edits"]:
@@ -77,7 +91,39 @@ def main() -> None:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"Wrote {path} ({len(records):,} examples)")
 
-    write_report(records, real, synthetic, stats, unexplained, args.samples, seed)
+    write_report(records, real, synthetic, generated, stats, unexplained, args.samples, seed)
+
+
+def build_backtranslated(dataset_cfg: dict, override: str | None) -> list[dict]:
+    """Read the kept back-translation pairs and type them, if there are any.
+
+    Absent pairs are not an error. The corpus has been built twice without them
+    and the recipe has to stay runnable from a fresh clone, where training the
+    generator is a separate and much longer step.
+    """
+    settings = dataset_cfg.get("backtranslation") or {}
+    if override == "":
+        print("Skipping back-translated errors (--backtranslation '')")
+        return []
+    path = Path(override or settings.get("pairs") or backtranslate.PAIRS_DIR / "de.kept.jsonl")
+    if not path.exists():
+        print(
+            f"No back-translated pairs at {path}; building without them. "
+            f"Make them with `make backtranslation`."
+        )
+        return []
+
+    pairs = backtranslate.read_pairs(path)
+    size = settings.get("size")
+    if size:
+        pairs = pairs[:size]
+    print(f"Typing {len(pairs):,} back-translated pairs ...")
+    records = [
+        dict(record, source_kind="backtranslation")
+        for record in backtranslate.training_records(pairs)
+    ]
+    print(f"  {len(records):,} typed")
+    return records
 
 
 def build_synthetic(config: dict, size: int, seed: int):
@@ -134,7 +180,9 @@ def build_synthetic(config: dict, size: int, seed: int):
     return records, stats, unexplained
 
 
-def write_report(records, real, synthetic, stats, unexplained, samples: int, seed: int) -> None:
+def write_report(
+    records, real, synthetic, generated, stats, unexplained, samples: int, seed: int
+) -> None:
     """Verify the invariants and write the sample the exit criterion asks for."""
     damaged = [r for r in records if r["edits"]]
     correct = [r for r in records if not r["edits"]]
@@ -151,13 +199,18 @@ def write_report(records, real, synthetic, stats, unexplained, samples: int, see
         "# Phase 2: the training set",
         "",
         f"{total:,} examples: **{kinds['learner']:,} real** learner sentences from "
-        f"Falko-MERLIN train and **{kinds['synthetic']:,} synthetic** ones. "
+        f"Falko-MERLIN train, **{kinds['synthetic']:,} rule-generated** ones, and "
+        f"**{kinds['backtranslation']:,} back-translated** ones. "
         f"{len(correct):,} need no correction ({len(correct) / total:.1%}).",
         "",
-        "Iteration 2 of the recipe. The first was synthetic-only and made the model worse "
-        "than the untrained baseline on 14 of 15 error types "
-        "(`reports/phase3/evaluation.md`), so real learner errors are the primary signal "
-        "now and the corruptors are the supporting one.",
+        "Iteration 1 was synthetic-only and made the model worse than the untrained "
+        "baseline on 14 of 15 error types (`reports/phase3/evaluation.md`), so real "
+        "learner errors became the primary signal and the corruptors the supporting one. "
+        "Iteration 3 widened the corruptors from 8 error types to 17 and bought +0.0016, "
+        "which is nothing (`reports/phase3/ablations.md`, section 5). The back-translated "
+        "share is iteration 5's answer to why: a rule can only write the error types that "
+        "are easy to write, and those are the ones the model was already good at. "
+        "See `reports/phase3/headroom.md`.",
         "",
         "## Invariants",
         "",

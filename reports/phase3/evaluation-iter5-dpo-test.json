@@ -1,0 +1,19 @@
+{
+  "system": "iter5-dpo-test",
+  "f0.5": 0.6873,
+  "precision": 0.7065,
+  "recall": 0.62,
+  "overcorrection_rate": 0.155,
+  "detection_f": 0.7221,
+  "correction_f": 0.6019,
+  "lenient_f0.5": 0.6917,
+  "lenient_correction_f": 0.6065,
+  "baseline_bar": 0.7072,
+  "explanation": {
+    "coverage": 0.8832,
+    "precision": 0.9384,
+    "type_accuracy": 0.7229,
+    "rewrites": 5533,
+    "claims": 5681
+  }
+}

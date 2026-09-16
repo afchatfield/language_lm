@@ -147,3 +147,122 @@ def test_only_real_adjectives_get_adjective_endings(nlp) -> None:
     text = "Er ging mit einem Freund gegen die große Mauer ."
     changed = {text.split()[c.start] for c in adjective_form(text.split(), nlp(text))}
     assert changed == {"große"}
+
+
+# --- the new rules, and the labels they claim -------------------------------
+
+
+def corrupt_one(rule: str, sentence: str):
+    """Every corruption `rule` finds in `sentence`, parsed if the rule needs it."""
+    import spacy
+
+    from langlm.corruptors import NEEDS_PARSE, REGISTRY
+
+    tokens = sentence.split()
+    doc = spacy.load("de_core_news_sm", disable=["ner"])(sentence) if rule in NEEDS_PARSE else None
+    return REGISTRY[rule](tokens, doc)
+
+
+def test_the_declared_type_is_the_type_the_rule_emits() -> None:
+    """`rules/de.yaml` names an error type for every corruptor. It has to be the
+    one the code produces: the YAML is what a reader consults and the code is
+    what the corpus is built from, and they were allowed to disagree once --
+    `das_dass` was documented as `R:SPELL` while the corpus calls it `R:OTHER`.
+    """
+    import spacy
+
+    from langlm.corruptors import REGISTRY, propose
+    from langlm.explanations import load
+
+    declared = {rule: entry["error_type"] for rule, entry in load()["corruptors"].items()}
+    nlp = spacy.load("de_core_news_sm", disable=["ner"])
+    probes = [
+        "Der Lehrer hat gesagt , dass die Schüler mit großer Mühe die Aufgaben lösen .",
+        "Gestern ging er mit den Kindern und Eltern ins Kino .",
+        "Er interessiert sich für den Preis des Hauses und wartet auf mich .",
+        "Sie ist gestern nach Hause gefahren , weil sie das Buch vergessen hat .",
+    ]
+    seen: dict[str, set[str]] = {}
+    for probe in probes:
+        for corruption in propose(probe.split(), doc=nlp(probe)):
+            seen.setdefault(corruption.rule, set()).add(corruption.error_type)
+    assert seen, "no rule fired on the probes"
+    for rule, types in sorted(seen.items()):
+        assert rule in declared, f"{rule} produces corruptions but has no template"
+        assert types <= {declared[rule]} or declared[rule] in types, (
+            f"{rule} emits {sorted(types)} but rules/de.yaml declares {declared[rule]}"
+        )
+    # `drop_comma` labels its corruptions with the comma rule that was broken,
+    # so what shows up here are template names rather than registry names.
+    assert set(seen) - set(REGISTRY) <= {"drop_comma_subordinate", "drop_comma_coordinating"}
+
+
+def test_a_dropped_pronoun_is_never_the_first_word() -> None:
+    # Deleting the first word leaves the next one lower-case, which is a second
+    # error the edit does not claim and the explanation does not mention.
+    found = corrupt_one("drop_pronoun", "Er interessiert sich für Musik .")
+    assert found
+    assert all(c.start > 0 for c in found)
+    assert all(c.replacement == "" for c in found)
+
+
+def test_the_dative_plural_n_only_comes_off_a_dative_plural() -> None:
+    # `den` is an accusative singular here, so stripping the -n would produce a
+    # non-word rather than a case error.
+    assert not corrupt_one("dative_plural_n", "Wir warten auf den Bus .")
+    assert corrupt_one("dative_plural_n", "Er hilft den Kindern in der Schule .")
+
+
+def test_morphological_damage_leaves_a_real_word() -> None:
+    # `Praxis` ends in -s without that -s being a genitive ending.
+    assert not corrupt_one("genitive_s", "Die Ergebnisse der Praxis sind gut .")
+    assert corrupt_one("genitive_s", "Der Preis des Hauses ist hoch .")
+
+
+def test_a_comma_is_not_injected_before_und_joining_clauses() -> None:
+    # A comma before an `und` that joins two main clauses is permitted German,
+    # so injecting one would be labelling correct writing as an error.
+    assert not corrupt_one("comma_before_und", "Er kam nach Hause und sie ging weg .")
+    assert corrupt_one("comma_before_und", "Sie kaufte Brot und Butter .")
+
+
+def test_the_infinitive_rule_skips_forms_that_are_already_infinitives() -> None:
+    # First and third person plural present are identical to the infinitive, so
+    # there is nothing to damage.
+    assert not corrupt_one("verb_infinitive", "Wir warten auf den Bus .")
+    assert corrupt_one("verb_infinitive", "Er wartet auf den Bus .")
+
+
+def test_an_insertion_can_share_a_position_with_a_replacement() -> None:
+    """A comma inserted before a word that is itself being changed.
+
+    Both corruptions land on index 3 and they do not conflict -- the comma goes
+    in front of the replaced token. Sorting on the start alone left the order to
+    chance and raised on half of them, which is how the first build of the
+    punctuation rules died.
+    """
+    from langlm.corruptors.base import Corruption, apply
+
+    tokens = ["Gestern", "ging", "er", "ist", "nach", "Hause", "."]
+    damaged = apply(
+        tokens,
+        [
+            Corruption(3, 4, "sind", "R:AUX:FORM", "auxiliary_form"),
+            Corruption(3, 3, ",", "U:PUNCT", "comma_after_fronted"),
+        ],
+    )
+    assert damaged.source == "Gestern ging er , sind nach Hause ."
+    assert [(e.start, e.end, e.correction) for e in damaged.edits] == [(3, 4, ""), (4, 5, "ist")]
+
+
+def test_two_insertions_at_one_point_are_refused() -> None:
+    from langlm.corruptors.base import Corruption, apply
+
+    with pytest.raises(ValueError, match="same point"):
+        apply(
+            ["Brot", "und", "Butter", "."],
+            [
+                Corruption(1, 1, ",", "U:PUNCT", "comma_before_und"),
+                Corruption(1, 1, ",", "U:PUNCT", "comma_after_fronted"),
+            ],
+        )

@@ -21,19 +21,25 @@ clean_corpus:
 
 # --- error injection ---------------------------------------------------------
 # Derived, not hand-picked: `scripts/derive_injection_weights.py` blends the
-# Falko-MERLIN error histogram with the Phase 1 few-shot recall and writes this
-# block. Regenerate it rather than editing it, and see
+# Falko-MERLIN error histogram with the current system's per-type recall and
+# writes this block. Regenerate it rather than editing it, and see
 # `reports/phase2/injection_weights.md` for the table it came from.
 #
-# `R:ADP`, `M:DET` and `R:WO` carry a 2x boost: the prompted baseline recovers
-# them at 0.04, 0.05 and 0.09, so an example of one teaches more than an example
-# of spelling, which it already handles at 0.49. The cap keeps the corpus
-# recognisably learner-shaped instead of turning it into a list of the
-# baseline's weaknesses.
+# Iteration 3 widens the corruptors from 8 error types to 17. The 8 covered
+# 54.3% of dev's gold edits; the model's recall on the types they missed was
+# 0.404 against 0.667 on the types they hit, and no serving-side change moved
+# that -- see `reports/phase3/ablations.md`. The new rules are pronouns,
+# prepositions, auxiliaries, verb and noun morphology, and the two commas German
+# does not take where English does.
 #
-# The rates are renormalised over the eight types the corruptors can produce, so
-# they are above their corpus-wide share; types no rule injects -- verb
-# morphology, missing pronouns -- are absent and their share is redistributed.
+# Nothing is boosted this time. The 2x boost exists for types the model is blind
+# to, and against the Phase 1 prompted baseline three types qualified at recall
+# 0.04-0.09; the fine-tuned model's weakest injectable type is M:ADP at 0.26, so
+# the weights are simply the natural distribution over what the rules can make.
+#
+# One caveat the table cannot show: `R:OTHER` is 10% here and every bit of it is
+# das/dass. The type is broad and the coverage is one confusion pair, so read
+# that row as "das/dass" rather than as the type.
 injection:
   # How many errors to put in one sentence, sampled inclusively.
   #
@@ -48,14 +54,23 @@ injection:
   # of dragging the blend down.
   errors_per_sentence: [1, 4]
   weights:
-    R:SPELL: 0.2076
-    R:DET:FORM: 0.1684
-    M:PUNCT: 0.1493
-    R:ORTH: 0.1200
-    R:ADP: 0.1066
-    M:DET: 0.0975
-    R:WO: 0.0805
-    R:ADJ:FORM: 0.0714
+    R:SPELL: 0.1665
+    R:DET:FORM: 0.1343
+    M:PUNCT: 0.1193
+    R:OTHER: 0.0997
+    R:ORTH: 0.0962
+    R:ADJ:FORM: 0.0570
+    R:NOUN:FORM: 0.0493
+    U:PUNCT: 0.0445
+    R:ADP: 0.0427
+    M:DET: 0.0392
+    R:WO: 0.0319
+    M:PRON: 0.0301
+    R:VERB:FORM: 0.0243
+    M:AUX: 0.0193
+    R:AUX:FORM: 0.0172
+    M:ADP: 0.0153
+    R:PRON:FORM: 0.0131
 
 # --- LanguageTool, for the rule-id survey -------------------------------------
 # Phase 1 has its own `disabled_rules` and this list is deliberately not shared
@@ -108,4 +123,26 @@ dataset:
     # A minority share. Enough to teach the explanation style, not enough to
     # reimpose the failure mode of iteration 1.
     size: 10000
+  # Iteration 5. Clean text damaged by a model rather than by a rule -- trained
+  # on Falko-MERLIN train read backwards, so it has learned what a plausible
+  # mistake looks like instead of being told. This is the share that is meant to
+  # reach the types the corruptors cannot write: `R:OTHER`, lexical choice, is
+  # the largest remaining miss at recall 0.32 and no rule will ever produce it.
+  #
+  # The size is not arbitrary. Luhtaru et al. (2024) measure back-translated
+  # error generation on this exact benchmark at +2.4 F0.5 over gold-only for a
+  # 7B model -- and 100k generated sentences buy 76.25 of the 76.75 that 1M
+  # buys, so 100k is where the curve flattens rather than where the budget ran
+  # out. See `reports/phase3/headroom.md`.
+  #
+  # It needs a clean corpus at least this large: the frozen one is 60,000, and
+  # the pool it was drawn from holds about 167,000, so rebuild with
+  # `python scripts/build_clean_corpus.py --size 100000` before generating.
+  backtranslation:
+    size: 100000
+    # Defaults to `data/interim/backtranslation/de.kept.jsonl`, which is what
+    # `scripts/generate_backtranslation.py` writes after filtering. Absent pairs
+    # are not an error -- the corpus builds without them, because training the
+    # generator is a separate and much longer step than building a corpus.
+    pairs: null
   seed: 20260909

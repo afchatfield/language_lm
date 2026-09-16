@@ -47,10 +47,11 @@ class SplitSizes:
 def build(
     tokenizer,
     path: Path = TRAINING_FILE,
-    max_length: int = 512,
+    max_length: int = 1024,
     validation: int = 500,
     seed: int = 20260909,
     limit: int | None = None,
+    changes_weight: float = 1.0,
 ) -> tuple[list[Encoded], list[Encoded], SplitSizes]:
     """Encode the file and hold out a validation slice.
 
@@ -66,7 +67,7 @@ def build(
 
     encoded, dropped = [], 0
     for record in records:
-        item = encode(record, tokenizer, max_length=max_length)
+        item = encode(record, tokenizer, max_length=max_length, changes_weight=changes_weight)
         if item is None:
             dropped += 1
             continue
@@ -87,18 +88,25 @@ def collate(batch: list[Encoded], pad_token_id: int) -> dict:
     attention. Padding to the batch maximum rather than to `max_length` is most
     of the throughput on short data: the median example here is 138 tokens and
     the longest is 339.
+
+    `loss_weights` rides along beside `labels`, padded with zero. It is only
+    read by `WeightedTrainer` in `scripts/train_sft.py`, and it is all ones over
+    the answer unless a run asked for something else, so a batch from here is
+    still a plain causal-LM batch to anything that ignores the extra key.
     """
     import torch
 
     width = max(len(item) for item in batch)
-    input_ids, labels, attention = [], [], []
+    input_ids, labels, attention, weights = [], [], [], []
     for item in batch:
         padding = width - len(item)
         input_ids.append(item.input_ids + [pad_token_id] * padding)
         labels.append(item.labels + [IGNORE] * padding)
         attention.append([1] * len(item) + [0] * padding)
+        weights.append(item.weights + [0.0] * padding)
     return {
         "input_ids": torch.tensor(input_ids),
         "labels": torch.tensor(labels),
         "attention_mask": torch.tensor(attention),
+        "loss_weights": torch.tensor(weights, dtype=torch.float32),
     }

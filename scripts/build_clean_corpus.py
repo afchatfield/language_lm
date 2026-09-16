@@ -30,6 +30,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", type=int, help="Override the configured corpus size")
     parser.add_argument("--seed", type=int, help="Override the configured shuffle seed")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=clean_de.PARSE_JOBS,
+        help="Worker processes for the parse. Speed only; the corpus is unaffected.",
+    )
     args = parser.parse_args()
 
     settings = load_config("phase2")["clean_corpus"]
@@ -38,7 +44,7 @@ def main() -> None:
     corpora = settings["corpora"]
 
     print(f"Filtering {', '.join(corpora)} ...")
-    sentences, stats = clean_de.build(corpora, size=size, seed=seed)
+    sentences, stats = clean_de.build(corpora, size=size, seed=seed, jobs=args.jobs)
     print(f"{len(sentences):,} sentences kept of {stats.read:,} read")
 
     from langlm.eval.errant_de import tokenize

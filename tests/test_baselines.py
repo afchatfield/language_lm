@@ -104,3 +104,50 @@ def test_shots_include_correct_sentences_in_the_corpus_proportion():
     unchanged = sum(1 for source, target in shots if source == target)
     assert len(shots) == 10
     assert unchanged == 5
+
+
+# --- the fine-tuned model's answer ------------------------------------------
+
+
+def read(answer: str, source: str = "der hund bellt ."):
+    """Run one answer through the baseline's reader, without loading a model."""
+    from langlm.baselines.finetuned import FineTunedBaseline
+
+    system = FineTunedBaseline(repo_id="none")
+    return system._read(answer, source), system
+
+
+def test_the_sentence_is_taken_from_the_answer():
+    corrected, system = read('{"correction": "Der Hund bellt .", "changes": []}')
+    assert corrected == "Der Hund bellt ."
+    assert system.faults.invalid_json == 0
+
+
+def test_an_unreadable_answer_leaves_the_sentence_alone_and_is_counted():
+    # Scoring it as restraint without counting it is how a quarter of dev came
+    # to look like a model that knew when not to intervene.
+    corrected, system = read("the model wandered off")
+    assert corrected == "der hund bellt ."
+    assert system.faults.invalid_json == 1
+
+
+def test_a_cut_off_answer_keeps_its_correction_and_loses_its_changes():
+    corrected, system = read('{"correction": "Der Hund bellt .", "changes": [{"was": "der h')
+    assert corrected == "Der Hund bellt ."
+    assert system.faults.recovered == 1
+    assert system.faults.invalid_json == 0
+    assert system.claims == [[]]
+
+
+def test_leaving_the_sentence_alone_is_counted_separately():
+    corrected, system = read('{"correction": "der hund bellt .", "changes": []}')
+    assert corrected == "der hund bellt ."
+    assert system.faults.unchanged == 1
+
+
+def test_the_changes_are_kept_for_the_explanation_metrics():
+    _, system = read(
+        '{"correction": "Der Hund bellt .", '
+        '"changes": [{"was": "hund", "now": "Hund", "type": "R:ORTH"}]}'
+    )
+    assert system.claims == [[{"was": "hund", "now": "Hund", "type": "R:ORTH"}]]

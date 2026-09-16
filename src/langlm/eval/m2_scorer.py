@@ -35,10 +35,11 @@ a grammar checker that invents corrections is worse than one that misses them.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
 from langlm.data.m2 import Edit, M2Sentence
+from langlm.eval import leniency
 
 #: A lattice vertex: (tokens of the source consumed, tokens of the hypothesis consumed).
 Vertex = tuple[int, int]
@@ -237,6 +238,7 @@ def extract_edits(
     hyp: Sequence[str],
     gold: Iterable[Edit] = (),
     max_unchanged: int = MAX_UNCHANGED,
+    equivalent: Callable[[str, str], bool] | None = None,
 ) -> list[SystemEdit]:
     """Recover the system's edits, described so as to match `gold` where possible.
 
@@ -246,6 +248,11 @@ def extract_edits(
         gold: Gold edits to align the description to. With none supplied the
             result is simply the shortest edit sequence.
         max_unchanged: Unchanged tokens a single phrase-level edit may span.
+        equivalent: Optional softened equality on replacement text, from
+            :mod:`langlm.eval.leniency`. It has to be applied here as well as at
+            the counting step: the lattice picks the description that matches
+            the most gold edits, so a description is only reachable if the
+            matching rule that scores it is the one steering it.
 
     Returns:
         The chosen edits, in source order.
@@ -253,7 +260,9 @@ def extract_edits(
     if list(source) == list(hyp):
         return []
 
-    gold_keys = {(e.start, e.end, e.correction) for e in gold if not e.is_noop}
+    matches = leniency.matcher(
+        ((e.start, e.end, e.correction) for e in gold if not e.is_noop), equivalent
+    )
     token_arcs = _token_arcs(source, hyp)
     arcs = _phrase_arcs(token_arcs, source, hyp, max_unchanged=max_unchanged)
 
@@ -268,7 +277,7 @@ def extract_edits(
         for target, edit in arcs[vertex]:
             if edit is None:
                 candidate = cost
-            elif edit in gold_keys:
+            elif matches(edit):
                 candidate = (cost[0] - 1, cost[1])
             else:
                 candidate = (cost[0], cost[1] + 1)
@@ -290,19 +299,69 @@ def sentence_counts(
     source: Sequence[str],
     hyp: Sequence[str],
     gold: Sequence[Edit],
+    equivalent: Callable[[str, str], bool] | None = None,
 ) -> Counts:
-    """Score one hypothesis against one annotator's gold edits."""
+    """Score one hypothesis against one annotator's gold edits.
+
+    Args:
+        source: The original sentence's tokens.
+        hyp: The system's corrected sentence, tokenised the same way.
+        gold: One annotator's edits.
+        equivalent: Optional softened equality on replacement text.
+    """
     real_gold = [e for e in gold if not e.is_noop]
     gold_keys = {(e.start, e.end, e.correction) for e in real_gold}
-    system = extract_edits(source, hyp, real_gold)
-    tp = sum(1 for edit in system if edit in gold_keys)
+    system = extract_edits(source, hyp, real_gold, equivalent=equivalent)
+    if equivalent is None:
+        tp = sum(1 for edit in system if edit in gold_keys)
+    else:
+        tp = _lenient_hits(system, gold_keys, equivalent)
     return Counts(tp=tp, fp=len(system) - tp, fn=len(gold_keys) - tp)
+
+
+def _lenient_hits(
+    system: Sequence[SystemEdit],
+    gold_keys: set[SystemEdit],
+    equivalent: Callable[[str, str], bool],
+) -> int:
+    """Count matches one-to-one, so no gold edit is credited twice.
+
+    Exact equality cannot double-count -- two system edits on one span differ in
+    their text, so at most one can equal the gold -- but a softened equality can:
+    consecutive insertions at a single position share a span, and both could be
+    equivalent to the one thing the annotator inserted there. Consuming each
+    gold edit as it is matched keeps true positives from exceeding the gold
+    count, which would otherwise drive the false-negative count negative.
+    """
+    remaining = set(gold_keys)
+    hits = 0
+    for edit in system:
+        if edit in remaining:
+            remaining.discard(edit)
+            hits += 1
+            continue
+        start, end, replacement = edit
+        match = next(
+            (
+                candidate
+                for candidate in remaining
+                if candidate[0] == start
+                and candidate[1] == end
+                and equivalent(candidate[2], replacement)
+            ),
+            None,
+        )
+        if match is not None:
+            remaining.discard(match)
+            hits += 1
+    return hits
 
 
 def score(
     sentences: Sequence[M2Sentence],
     hypotheses: Sequence[str],
     beta: float = 0.5,
+    equivalent: Callable[[str, str], bool] | None = None,
 ) -> M2Score:
     """Score a corpus of hypotheses against gold M2 sentences.
 
@@ -311,6 +370,9 @@ def score(
         hypotheses: One corrected sentence per gold sentence, whitespace-tokenised
             the same way the source is.
         beta: F-score beta; 0.5 by convention in GEC.
+        equivalent: Optional softened equality on replacement text, from
+            :mod:`langlm.eval.leniency`. The default of ``None`` is strict
+            string equality, and is what the headline number is reported at.
 
     Raises:
         ValueError: if the two sequences are of different lengths, which almost
@@ -331,6 +393,7 @@ def score(
                 sentence.source_tokens,
                 hypothesis.split(),
                 sentence.edits_for(annotator),
+                equivalent=equivalent,
             )
             # Pick the annotator that leaves the corpus best off so far, the way
             # the reference scorers do: a local choice can trade tp for fp in a

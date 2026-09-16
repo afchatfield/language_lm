@@ -1,0 +1,19 @@
+{
+  "system": "trimmed-healed",
+  "f0.5": 0.6991,
+  "precision": 0.7284,
+  "recall": 0.6022,
+  "overcorrection_rate": 0.0725,
+  "detection_f": 0.742,
+  "correction_f": 0.6218,
+  "lenient_f0.5": 0.7037,
+  "lenient_correction_f": 0.626,
+  "baseline_bar": 0.7083,
+  "explanation": {
+    "coverage": 0.8508,
+    "precision": 0.9099,
+    "type_accuracy": 0.6927,
+    "rewrites": 5548,
+    "claims": 5582
+  }
+}

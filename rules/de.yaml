@@ -17,10 +17,24 @@
 # Placeholders: {wrong} is what the learner wrote, {right} the correction.
 
 # `reference` cites the Rat für deutsche Rechtschreibung ruleset, which is free
-# and numbered. Only paragraphs that have been checked against the official text
-# are filled in; `null` means the rule is real but the citation has not been
-# verified, and shipping a wrong paragraph number would be worse than shipping
-# none. See reports/phase2/explanations.md for what still needs checking.
+# and numbered. Every paragraph here has been checked against the official text
+# by `scripts/check_citations.py`, which is wired into the test suite -- the
+# numbers are not remembered, they are verified on the PDF.
+#
+# The edition matters and is pinned below. The 2024 Regelwerk renumbered part E:
+# the subordinate-clause comma moved from § 74 to § 73, and the und/oder rule
+# from § 72 to § 71. Citations written against the 2018 text now point at the
+# semicolon and at a Zusatz respectively, which is how three wrong paragraph
+# numbers shipped in this file. An unqualified "§ 74" is not a citation.
+#
+# `null` does not mean unfinished. Most of these rules are grammar -- agreement,
+# case government, word order -- and the Regelwerk has no jurisdiction over any
+# of it: it covers sound-letter assignment, compound spelling, hyphens,
+# capitalisation, punctuation and line breaking, and nothing else. Every null
+# carries a `reference_note` saying why no citation exists, and a test asserts
+# that it does, so the field can never again look merely unfinished.
+
+edition: Amtliches Regelwerk 2024
 
 corruptors:
   noun_case:
@@ -40,13 +54,16 @@ corruptors:
   umlaut:
     error_type: R:SPELL
     reference: null
+    reference_note: >-
+      not ruled on -- part A legislates the ä/e and äu/eu choices (1.4, 1.5),
+      not a dropped umlaut
     explanation: >-
       The umlaut is part of the letter, not decoration on it. «{wrong}» and
       «{right}» are different words to a German reader. Write «{right}».
 
   das_dass:
-    error_type: R:SPELL
-    reference: null
+    error_type: R:OTHER
+    reference: "§ 4(6), § 4 E2"
     explanation: >-
       «das» and «dass» sound the same and do different jobs. «das» is an article
       or a relative pronoun and points at a thing; «dass» is a conjunction that
@@ -55,6 +72,8 @@ corruptors:
   article_form:
     error_type: R:DET:FORM
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate agreement
     explanation: >-
       The article has to agree with its noun in gender, number and case.
       «{wrong}» does not fit here; the form the sentence needs is «{right}».
@@ -62,6 +81,9 @@ corruptors:
   preposition:
     error_type: R:ADP
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- which preposition a phrase takes is
+      lexical, not a spelling convention
     explanation: >-
       German prepositions are not chosen by translating the English one. This
       phrase takes «{right}» rather than «{wrong}».
@@ -69,20 +91,22 @@ corruptors:
   drop_article:
     error_type: M:DET
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate syntax
     explanation: >-
       German nouns almost always need an article, even where English drops it.
       Add «{right}» before the noun.
 
   drop_comma_subordinate:
     error_type: M:PUNCT
-    reference: "§ 74"
+    reference: "§ 73"
     explanation: >-
       German separates a subordinate clause from its main clause with a comma.
       Unlike English, this is a rule rather than a matter of taste. Add the comma.
 
   drop_comma_coordinating:
     error_type: M:PUNCT
-    reference: null
+    reference: "§ 71 E2"
     explanation: >-
       German puts a comma before «sondern», «aber», «doch» and «jedoch» when they
       join two clauses. English usually does not, which is why this comma is easy
@@ -90,7 +114,7 @@ corruptors:
 
   drop_comma:
     error_type: M:PUNCT
-    reference: null
+    reference: "§ 72"
     explanation: >-
       A comma belongs here. German uses them to mark off parts of a sentence --
       an apposition, an insertion, a list -- more strictly than English does.
@@ -98,12 +122,17 @@ corruptors:
   keyboard:
     error_type: R:SPELL
     reference: null
+    reference_note: >-
+      no rule is broken -- a mistyped word is not a word, so nothing
+      legislates it
     explanation: >-
       «{wrong}» is not a German word. It looks like a slip for «{right}».
 
   adjective_form:
     error_type: R:ADJ:FORM
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate declension
     explanation: >-
       An adjective before a noun takes an ending that depends on the noun's
       gender, number and case, and on whether an article comes first. Here the
@@ -112,6 +141,8 @@ corruptors:
   two_way_case:
     error_type: R:DET:FORM
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate case government
     explanation: >-
       This preposition takes the accusative for movement towards somewhere and
       the dative for position. Nothing is moving here, so it is «{right}» rather
@@ -120,13 +151,111 @@ corruptors:
   verb_final:
     error_type: R:WO
     reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate word order
     explanation: >-
       In a subordinate clause the finite verb goes to the very end, which is not
       where English puts it. The clause should read «{right}».
 
+  pronoun_form:
+    error_type: R:PRON:FORM
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate case marking
+    explanation: >-
+      German marks case on the pronoun where English leaves it to word order --
+      «mir» and «mich» are both "me". What stands here has to be «{right}»,
+      not «{wrong}».
+
+  drop_pronoun:
+    error_type: M:PRON
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate syntax
+    explanation: >-
+      German needs the pronoun «{right}» here. Its verb endings no longer
+      identify the subject on their own, so -- unlike Italian, Spanish or Polish
+      -- the pronoun cannot be left out. A verb like this one that takes «sich»
+      needs it just as strictly.
+
+  drop_preposition:
+    error_type: M:ADP
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- verb government is lexical, not a
+      spelling convention
+    explanation: >-
+      This phrase needs «{right}». Which preposition a German verb governs is
+      not predictable from the English one -- «warten auf», «denken an» -- so it
+      has to be learned with the verb rather than translated.
+
+  auxiliary_form:
+    error_type: R:AUX:FORM
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate agreement
+    explanation: >-
+      The auxiliary agrees with the subject in person and number. The subject
+      here needs «{right}» rather than «{wrong}».
+
+  drop_auxiliary:
+    error_type: M:AUX
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate syntax
+    explanation: >-
+      The perfect and the passive are built from two parts, and «{right}» is the
+      one that carries the tense. German cannot recover it from anywhere else,
+      so leaving it out leaves the sentence without a finite verb.
+
+  verb_infinitive:
+    error_type: R:VERB:FORM
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate agreement
+    explanation: >-
+      «{wrong}» is the infinitive -- the form a dictionary lists. A finite verb
+      has to agree with its subject, so this sentence needs «{right}».
+
+  genitive_s:
+    error_type: R:NOUN:FORM
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate declension
+    explanation: >-
+      A masculine or neuter noun in the genitive takes an -s or -es ending, even
+      though the article has already marked the case. Write «{right}».
+
+  dative_plural_n:
+    error_type: R:NOUN:FORM
+    reference: null
+    reference_note: >-
+      grammar rather than orthography -- the Regelwerk does not legislate declension
+    explanation: >-
+      German adds an -n to the plural in the dative and in no other case. The
+      dative plural here is «{right}».
+
+  comma_after_fronted:
+    error_type: U:PUNCT
+    reference: null
+    reference_note: >-
+      no rule to cite -- part E says when a comma is set, never when one is
+      forbidden, so the absence here follows from no rule applying
+    explanation: >-
+      German does not put a comma after a fronted phrase the way English does.
+      The fronting is already marked by the verb standing second, so the comma
+      has nothing left to do. Delete it.
+
+  comma_before_und:
+    error_type: U:PUNCT
+    reference: "§ 71"
+    explanation: >-
+      No comma before «und» or «oder» when they join two words or phrases.
+      English writes "bread, and butter"; German does not.
+
   separable_prefix:
     error_type: R:WO
-    reference: null
+    reference: "§ 34"
     explanation: >-
       This verb is separable. In a main clause the prefix detaches and moves to
       the end, so it is «{right}» rather than one word.

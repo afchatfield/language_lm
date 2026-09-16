@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from langlm.corruptors.base import Corruption, corruptor, parse_corruptor
+from langlm.eval.errant_de.spelling import is_known_word
 
 # --- closed classes ---------------------------------------------------------
 
@@ -123,10 +124,17 @@ def umlaut(tokens: Sequence[str]) -> list[Corruption]:
 
 @corruptor("das_dass")
 def das_dass(tokens: Sequence[str]) -> list[Corruption]:
-    """Swap das and dass, which sound identical and are not interchangeable."""
+    """Swap das and dass, which sound identical and are not interchangeable.
+
+    Typed `R:OTHER`, not `R:SPELL`, because that is what the corpus calls it:
+    220 of the 221 das/dass edits in Falko-MERLIN train and dev are `R:OTHER`.
+    The two words are a determiner and a conjunction, so no part-of-speech
+    label covers the pair and ERRANT falls through to `OTHER` -- which makes
+    this rule the only injected coverage of dev's second-largest type.
+    """
     swap = {"das": "dass", "dass": "das", "Das": "Dass", "Dass": "Das"}
     return [
-        Corruption(i, i + 1, swap[token], "R:SPELL", "das_dass")
+        Corruption(i, i + 1, swap[token], "R:OTHER", "das_dass")
         for i, token in enumerate(tokens)
         if token in swap
     ]
@@ -407,4 +415,288 @@ def separable_prefix(tokens: Sequence[str], doc) -> list[Corruption]:
                 "separable_prefix",
             )
         )
+    return found
+
+
+# --- pronouns ---------------------------------------------------------------
+
+#: Personal pronouns whose dative and accusative forms learners exchange. Only
+#: the unambiguous pairs: `ihr` is dative singular feminine, a possessive and a
+#: second-person plural subject all at once, so a swap there is as likely to
+#: produce a different error as the intended one.
+PRONOUN_CASE = {
+    "mir": "mich",
+    "mich": "mir",
+    "dir": "dich",
+    "dich": "dir",
+    "ihm": "ihn",
+    "ihn": "ihm",
+}
+
+
+@corruptor("pronoun_form")
+def pronoun_form(tokens: Sequence[str]) -> list[Corruption]:
+    """Exchange a dative pronoun for its accusative, or the other way round.
+
+    German marks on the pronoun what English marks with word order -- `mir` and
+    `mich` are both `me` -- so the choice has nothing in the learner's first
+    language to hang on.
+    """
+    found = []
+    for i, token in enumerate(tokens):
+        swapped = PRONOUN_CASE.get(token.lower())
+        if swapped:
+            replacement = swapped.capitalize() if token[0].isupper() else swapped
+            found.append(Corruption(i, i + 1, replacement, "R:PRON:FORM", "pronoun_form"))
+    return found
+
+
+@parse_corruptor("drop_pronoun")
+def drop_pronoun(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Leave out a subject or reflexive pronoun.
+
+    Two learners make this error for two reasons. A speaker of a pro-drop
+    language -- Italian, Spanish, Polish -- omits the subject because their own
+    grammar lets them; German never does, because its verb endings no longer
+    identify the subject on their own. An English speaker omits `sich`, because
+    the English verb it translates is not reflexive: *he interests for music*.
+    """
+    if len(doc) != len(tokens):
+        return []
+    return [
+        Corruption(token.i, token.i + 1, "", "M:PRON", "drop_pronoun")
+        for token in doc
+        # Not sentence-initial: dropping the first word leaves the next one
+        # lower-case, which is a second error the edit does not claim.
+        if token.i > 0 and (token.tag_ == "PRF" or (token.tag_ == "PPER" and token.dep_ == "sb"))
+    ]
+
+
+# --- prepositions and auxiliaries -------------------------------------------
+
+
+@parse_corruptor("drop_preposition")
+def drop_preposition(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Leave out a preposition the verb or the phrase requires.
+
+    `warten auf`, `denken an`, `sich interessieren für`: which preposition a
+    German verb governs is not predictable from the English one, and the learner
+    who does not know it often writes none at all. Contracted forms (`im`,
+    `zum`) are left alone -- removing one would take an article with it, and the
+    edit would be two errors wearing the label of one.
+    """
+    if len(doc) != len(tokens):
+        return []
+    return [
+        Corruption(token.i, token.i + 1, "", "M:ADP", "drop_preposition")
+        for token in doc
+        if token.tag_ == "APPR" and token.i > 0
+    ]
+
+
+#: The finite forms of the three auxiliaries, grouped by tense. A swap stays
+#: inside its group so that the error is the agreement one a learner makes,
+#: rather than a change of tense wearing an agreement label.
+#: The second person is left out of every group, and not for tidiness. It barely
+#: occurs in edited prose, so the sentences available to damage do not offer it
+#: a plausible context -- `die Saison warst die Ausgabe` is not an error any
+#: learner makes. What learners do make is the third-person number error, which
+#: is also what the corpus shows: `ist` for `sind` and `wird` for `werden` are
+#: the two commonest auxiliary edits in Falko-MERLIN.
+AUXILIARY_FORMS = (
+    ("bin", "ist", "sind"),
+    ("war", "waren"),
+    ("habe", "hat", "haben"),
+    ("hatte", "hatten"),
+    ("werde", "wird", "werden"),
+    ("wurde", "wurden"),
+)
+
+
+@parse_corruptor("auxiliary_form")
+def auxiliary_form(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Make the auxiliary disagree with its subject.
+
+    Asks the tagger rather than matching the surface form, because `haben`,
+    `werden` and `sein` are also full verbs and their forms are some of the most
+    frequent words in the language: `sie werden` as a passive auxiliary and `sie
+    werden` as *they become* want different explanations, and `wird` inside a
+    quoted title wants neither.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ != "VAFIN":
+            continue
+        lower = token.text.lower()
+        for group in AUXILIARY_FORMS:
+            if lower not in group:
+                continue
+            found.extend(
+                Corruption(
+                    token.i,
+                    token.i + 1,
+                    other.capitalize() if token.text[0].isupper() else other,
+                    "R:AUX:FORM",
+                    "auxiliary_form",
+                )
+                for other in group
+                if other != lower
+            )
+            break
+    return found
+
+
+@parse_corruptor("drop_auxiliary")
+def drop_auxiliary(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Leave out the auxiliary of a perfect or a passive.
+
+    `Ich habe gegessen` becomes `Ich gegessen`. The participle is where the
+    meaning is, so it is the auxiliary that a learner under pressure drops --
+    and German, unlike English, cannot recover it from anywhere else.
+    """
+    if len(doc) != len(tokens):
+        return []
+    return [
+        Corruption(token.i, token.i + 1, "", "M:AUX", "drop_auxiliary")
+        for token in doc
+        if token.tag_ == "VAFIN"
+        and token.i > 0
+        and any(child.tag_ in {"VVPP", "VAPP", "VMPP"} for child in token.children)
+    ]
+
+
+# --- verb and noun morphology -----------------------------------------------
+
+
+@parse_corruptor("verb_infinitive")
+def verb_infinitive(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Use the infinitive where the sentence needs a finite verb.
+
+    The commonest shape of learner German at A2: the verb is known in the form
+    the dictionary lists it in, and the endings that agree it with a subject
+    come later. Forms that are already identical to the infinitive -- the
+    first and third person plural of nearly every German verb -- offer nothing
+    to damage and are skipped.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ not in {"VVFIN", "VMFIN"}:
+            continue
+        infinitive = token.lemma_
+        if not infinitive or infinitive.lower() == token.text.lower():
+            continue
+        if not is_known_word(infinitive):
+            continue
+        if token.text[0].isupper():
+            infinitive = infinitive.capitalize()
+        # A modal is an auxiliary to the tagger and to the corpus, so `kann` ->
+        # `können` is an R:AUX:FORM edit however much it feels like a verb one.
+        error_type = "R:AUX:FORM" if token.tag_ == "VMFIN" else "R:VERB:FORM"
+        found.append(Corruption(token.i, token.i + 1, infinitive, error_type, "verb_infinitive"))
+    return found
+
+
+@parse_corruptor("genitive_s")
+def genitive_s(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Leave the genitive ending off a masculine or neuter noun.
+
+    `der Preis des Hauses` becomes `der Preis des Haus`. The case is already
+    marked on the article, so to a learner the ending on the noun looks like
+    something the sentence has said once already.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ != "NN" or token.morph.get("Case") != ["Gen"]:
+            continue
+        if token.morph.get("Number") != ["Sing"]:
+            continue
+        for ending in ("es", "s"):
+            stem = token.text[: -len(ending)]
+            # The stem must itself be a word. Without that test the rule strips
+            # the `s` off `Praxis` and calls the non-word it leaves a case error.
+            if token.text.endswith(ending) and len(stem) > 2 and is_known_word(stem):
+                found.append(Corruption(token.i, token.i + 1, stem, "R:NOUN:FORM", "genitive_s"))
+                break
+    return found
+
+
+@parse_corruptor("dative_plural_n")
+def dative_plural_n(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Leave the -n off a dative plural.
+
+    `mit den Kindern` becomes `mit den Kinder`. German adds an -n to the plural
+    in the dative and nowhere else, so the form appears only in a case the
+    learner is already unsure of. The parse decides, not the surface: `den` is a
+    dative plural and an accusative singular masculine both, and stripping the
+    -n from the second produces a non-word rather than a case error.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ != "NN" or token.morph.get("Case") != ["Dat"]:
+            continue
+        if token.morph.get("Number") != ["Plur"] or not token.text.endswith("n"):
+            continue
+        stem = token.text[:-1]
+        if len(stem) > 3 and is_known_word(stem):
+            found.append(Corruption(token.i, token.i + 1, stem, "R:NOUN:FORM", "dative_plural_n"))
+    return found
+
+
+# --- punctuation a German sentence does not take ----------------------------
+
+
+@parse_corruptor("comma_after_fronted")
+def comma_after_fronted(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Put an English comma after a fronted adverbial.
+
+    *Yesterday, I went home* is English punctuation; `Gestern , ging ich nach
+    Hause` is not German. The comma is wrong precisely because German has
+    already marked the fronting by moving the verb, so nothing is left for the
+    comma to do.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ not in FINITE_TAGS or token.dep_ != "ROOT" or token.i < 1:
+            continue
+        if tokens[token.i - 1] == ",":
+            continue
+        # The verb is second and something other than the subject is first, so
+        # what precedes it is a fronted element rather than a subject.
+        if any(child.dep_ == "sb" and child.i < token.i for child in token.children):
+            continue
+        found.append(Corruption(token.i, token.i, ",", "U:PUNCT", "comma_after_fronted"))
+    return found
+
+
+@parse_corruptor("comma_before_und")
+def comma_before_und(tokens: Sequence[str], doc) -> list[Corruption]:
+    """Put a comma before `und` where it joins two words rather than two clauses.
+
+    English writes *bread, and butter*; German writes `Brot und Butter` and
+    nothing else. Restricted to coordinations with no verb after the
+    conjunction, because a comma before an `und` that joins two main clauses is
+    permitted and injecting one would be labelling correct German as an error.
+    """
+    if len(doc) != len(tokens):
+        return []
+    found = []
+    for token in doc:
+        if token.tag_ != "KON" or token.text.lower() not in {"und", "oder"}:
+            continue
+        if token.i == 0 or tokens[token.i - 1] == ",":
+            continue
+        rest = doc[token.i + 1 :]
+        if any(later.tag_ in FINITE_TAGS for later in rest):
+            continue
+        found.append(Corruption(token.i, token.i, ",", "U:PUNCT", "comma_before_und"))
     return found

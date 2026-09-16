@@ -8,8 +8,10 @@
         ngrams lt-up lt-down lt-logs lt-check \
         corpora data dictionary fertility phase0 \
         overcorrection errant-check baselines phase1 \
-        clean-corpus lt-survey weights training-set phase2 \
+        clean-corpus lt-survey weights training-set phase2 thesaurus \
+        check-corruptors check-citations corrupter backtranslation \
         setup-cuda train-data dry-run train evaluate phase3 \
+        preference-pairs train-dpo evaluate-test trim-vocab \
         clean-ngrams clean-data
 
 PYTHON ?= python
@@ -67,6 +69,9 @@ data:  ## Download Falko-MERLIN and freeze the train/dev/test splits
 dictionary:  ## Fetch the German Hunspell dictionary used for error typing (~4MB)
 	$(PYTHON) -c "from langlm.eval.errant_de.spelling import ensure_dictionary; ensure_dictionary()"
 
+thesaurus:  ## Fetch OpenThesaurus, used only by the lenient scorer (~2MB)
+	$(PYTHON) scripts/download_thesaurus.py
+
 fertility:  ## Run the tokenizer fertility + vocab-trim analysis
 	$(PYTHON) scripts/run_fertility.py
 
@@ -95,13 +100,25 @@ clean-corpus:  ## Filter and freeze the clean German text the corruptors damage
 lt-survey:  ## Ask LanguageTool what it calls our injected errors (needs lt-up)
 	$(PYTHON) scripts/survey_lt_rules.py
 
+check-corruptors:  ## Verify each corruptor produces the error type it claims
+	$(PYTHON) scripts/check_corruptors.py
+
+check-citations:  ## Verify every cited Regelwerk paragraph against the official PDF
+	$(PYTHON) scripts/check_citations.py
+
 weights:  ## Re-derive the injected error distribution from Falko + the baselines
 	$(PYTHON) scripts/derive_injection_weights.py
+
+corrupter:  ## Train the error generator on Falko-MERLIN read backwards (needs a GPU)
+	$(PYTHON) scripts/train_corrupter.py
+
+backtranslation:  ## Run the error generator over clean German and filter the output
+	$(PYTHON) scripts/generate_backtranslation.py
 
 training-set:  ## Corrupt, explain, and write the training set
 	$(PYTHON) scripts/build_training_set.py
 
-phase2: clean-corpus lt-survey weights training-set  ## Run the whole of Phase 2
+phase2: clean-corpus lt-survey check-corruptors check-citations weights training-set  ## Run the whole of Phase 2
 	@echo "Phase 2 artefacts are in reports/phase2/"
 
 # --- Phase 3: supervised fine-tuning ----------------------------------------
@@ -129,6 +146,29 @@ evaluate:  ## Score the fine-tuned adapter against the Phase 1 baselines
 
 phase3: train-data dry-run train evaluate  ## Everything Phase 3 needs, in order
 	@echo "Adapter in checkpoints/phase3-de/, results in reports/phase3/"
+
+# --- Phase 3, iteration 6: preference training ------------------------------
+#
+# ADAPTER and NAME pick which SFT checkpoint is being improved, since these run
+# once per candidate model rather than once for the project.
+
+ADAPTER ?= checkpoints/phase3-de-iter4-cw025
+NAME ?= iter4-cw025
+
+preference-pairs:  ## Beam over Falko train, paired best-against-first (~1h on an H200)
+	$(PYTHON) scripts/build_preference_pairs.py --adapter $(ADAPTER) --name $(NAME)
+
+train-dpo:  ## Preference-train $(ADAPTER) on its own beam
+	$(PYTHON) scripts/train_dpo.py --pairs $(NAME) --adapter $(ADAPTER) \
+		--adapter-dir $(ADAPTER)-dpo
+
+evaluate-test:  ## Unseal the held-out split. Once per model, at the very end.
+	$(PYTHON) scripts/eval_finetuned.py --adapter $(ADAPTER) --name $(NAME)-test --split test
+
+# --- Phase 4: compression -----------------------------------------------------
+
+trim-vocab:  ## Trim the base model's vocabulary to the rows German and English use
+	$(PYTHON) scripts/trim_vocab.py --threshold 0.999
 
 # --- cleanup ----------------------------------------------------------------
 

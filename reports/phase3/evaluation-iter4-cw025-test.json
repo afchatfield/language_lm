@@ -1,0 +1,19 @@
+{
+  "system": "iter4-cw025-test",
+  "f0.5": 0.706,
+  "precision": 0.7322,
+  "recall": 0.6176,
+  "overcorrection_rate": 0.095,
+  "detection_f": 0.7387,
+  "correction_f": 0.6224,
+  "lenient_f0.5": 0.7094,
+  "lenient_correction_f": 0.6258,
+  "baseline_bar": 0.7083,
+  "explanation": {
+    "coverage": 0.8568,
+    "precision": 0.9161,
+    "type_accuracy": 0.6921,
+    "rewrites": 5251,
+    "claims": 5317
+  }
+}

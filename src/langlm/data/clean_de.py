@@ -150,22 +150,41 @@ def is_complete(doc) -> bool:
 
 
 def _pipeline():
-    """The spacy pipeline, shared with the error annotator."""
+    """The spacy pipeline, shared with the error annotator.
+
+    ``is_complete`` reads a tag, a coarse part of speech and one dependency
+    label, so the lemmatizer is dead weight here and is left out.
+    """
     import spacy
 
-    return spacy.load("de_core_news_sm", disable=["ner"])
+    return spacy.load("de_core_news_sm", disable=["ner", "lemmatizer"])
+
+
+#: Worker processes for the parse. The parse is the only expensive stage left
+#: and it is embarrassingly parallel, so it is worth spending cores on; more
+#: than a handful buys little, because spacy pays to pickle every doc back.
+PARSE_JOBS = 8
+
+#: How many sentences to parse before checking whether the caller still wants
+#: more. The parse is lazy so that a size limit does not pay for the whole
+#: pool, but spacy's workers deadlock if a `pipe` is abandoned half-drained --
+#: they block writing results nobody reads. Draining a chunk at a time keeps
+#: both: the caller stops within a chunk of where it asked to, and every pipe
+#: this opens is finished before the next one starts.
+PARSE_CHUNK = 10_000
 
 
 def candidates(
     corpora: Sequence[str],
     seed: int,
     stats: Rejections | None = None,
+    jobs: int = PARSE_JOBS,
 ) -> Iterator[str]:
     """Yield clean, deduplicated, non-held-out, syntactically whole sentences.
 
-    The cheap filters run over everything; the parse runs lazily over a shuffled
-    pool, so a caller that stops early parses what it needed and not 167,000
-    sentences to throw most of them away.
+    The cheap filters run over everything; the parse runs a chunk at a time over
+    a shuffled pool, so a caller that stops early parses roughly what it needed
+    and not 167,000 sentences to throw most of them away.
     """
     from langlm.eval.errant_de import tokenize
 
@@ -201,19 +220,28 @@ def candidates(
     random.Random(seed).shuffle(pool)
 
     nlp = _pipeline()
-    for sentence, doc in zip(pool, nlp.pipe(pool, batch_size=64), strict=True):
-        stats.examined += 1
-        if not is_complete(doc):
-            stats.fragment += 1
-            continue
-        stats.kept += 1
-        yield sentence
+    for start in range(0, len(pool), PARSE_CHUNK):
+        chunk = pool[start : start + PARSE_CHUNK]
+        # Bigger batches with workers, because each batch costs a round trip.
+        docs = (
+            list(nlp.pipe(chunk, batch_size=250, n_process=jobs))
+            if jobs > 1
+            else list(nlp.pipe(chunk, batch_size=64))
+        )
+        for sentence, doc in zip(chunk, docs, strict=True):
+            stats.examined += 1
+            if not is_complete(doc):
+                stats.fragment += 1
+                continue
+            stats.kept += 1
+            yield sentence
 
 
 def build(
     corpora: Sequence[str],
     size: int | None = None,
     seed: int = 20260909,
+    jobs: int = PARSE_JOBS,
 ) -> tuple[list[str], Rejections]:
     """Collect the clean corpus.
 
@@ -221,11 +249,14 @@ def build(
         corpora: Leipzig corpus names to draw from.
         size: Stop after this many sentences, or take everything if None.
         seed: Shuffle seed, so the same corpora always give the same corpus.
+        jobs: Worker processes for the parse. Affects speed only; the pool is
+            shuffled before it is parsed and the docs come back in order, so
+            the corpus is the same whatever this is set to.
 
     Returns:
         The sentences, and the funnel that produced them.
     """
     stats = Rejections()
-    stream = candidates(corpora, seed, stats)
+    stream = candidates(corpora, seed, stats, jobs=jobs)
     sentences = list(stream if size is None else itertools.islice(stream, size))
     return sentences, stats

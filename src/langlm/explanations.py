@@ -14,6 +14,7 @@ explanation rather than replacing it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
@@ -73,7 +74,12 @@ def explain(
 
     reference = entry.get("reference")
     if reference:
-        text = f"{text} (Rat für deutsche Rechtschreibung, {reference})"
+        # The edition is part of the citation, not decoration. Part E was
+        # renumbered in 2024, so a bare "§ 73" is ambiguous between the
+        # subordinate-clause comma and whatever the 2018 text put there.
+        edition = templates.get("edition", "")
+        cite = f"{edition}, {reference}" if edition else reference
+        text = f"{text} (Rat für deutsche Rechtschreibung, {cite})"
     return text
 
 
@@ -120,6 +126,57 @@ def explain_type(
     key = "R:FORM" if len(parts) > 2 and parts[2] == "FORM" else operation
     template = templates["operations"].get(key) or templates["operations"]["R"]
     return template.format(wrong=wrong, right=right, category=category).strip()
+
+
+@dataclass(frozen=True)
+class Explained:
+    """One rewrite, typed and put into words for the learner."""
+
+    start: int
+    end: int
+    wrong: str
+    right: str
+    error_type: str
+    explanation: str
+
+
+def explain_correction(source: str, correction: str, language: str = "de") -> list[Explained]:
+    """Explain a corrected sentence by re-deriving its edits, not by being told them.
+
+    The model is asked for a `changes` list alongside its correction, and that
+    list carries a type. Rendering the learner's explanation from it makes the
+    explanation only as good as the model's ability to name what it did, which
+    on Falko-MERLIN dev is 0.71 against the annotator. Deriving the edits from
+    the pair (source, correction) instead is deterministic and lands in the
+    mid-80s -- ERRANT re-derives the annotator's own type on 89% of the edits it
+    segments the same way -- so the explanation stops depending on a skill the
+    model is separately bad at.
+
+    The model's `changes` list keeps its job: it is the coverage and precision
+    diagnostic in `langlm.eval.explanation_scorer`, and rewrites the model does
+    not claim are measurably worse than the ones it does. It is just no longer
+    the thing the learner reads.
+    """
+    from langlm.eval import errant_de
+
+    edits = errant_de.annotate(source, correction)
+    tokens = source.split()
+    return [
+        Explained(
+            start=edit.start,
+            end=edit.end,
+            wrong=" ".join(tokens[edit.start : edit.end]),
+            right=edit.correction,
+            error_type=edit.error_type,
+            explanation=explain_type(
+                edit.error_type,
+                " ".join(tokens[edit.start : edit.end]),
+                edit.correction,
+                language,
+            ),
+        )
+        for edit in edits
+    ]
 
 
 def coverage(rules: list[str], language: str = "de") -> list[str]:

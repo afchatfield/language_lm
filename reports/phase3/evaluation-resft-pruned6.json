@@ -1,0 +1,19 @@
+{
+  "system": "resft-pruned6",
+  "f0.5": 0.6591,
+  "precision": 0.6912,
+  "recall": 0.5557,
+  "overcorrection_rate": 0.1675,
+  "detection_f": 0.7069,
+  "correction_f": 0.5806,
+  "lenient_f0.5": 0.6626,
+  "lenient_correction_f": 0.5848,
+  "baseline_bar": 0.7083,
+  "explanation": {
+    "coverage": 0.8013,
+    "precision": 0.8619,
+    "type_accuracy": 0.689,
+    "rewrites": 5481,
+    "claims": 5599
+  }
+}

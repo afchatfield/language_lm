@@ -24,7 +24,7 @@ the system thought it was doing, because that is what has to be fixed.
 from __future__ import annotations
 
 from collections import Counter as _Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from langlm.data.m2 import Edit, M2Sentence
@@ -88,12 +88,43 @@ def _keys(edits: Sequence[Edit], mode: str) -> dict[EditKey, str]:
     return keyed
 
 
+def _pair(
+    gold_edits: dict[EditKey, str],
+    hyp_edits: dict[EditKey, str],
+    equivalent: Callable[[str, str], bool] | None,
+) -> dict[EditKey, EditKey]:
+    """Match hypothesis edits to gold edits, exactly first and leniently after.
+
+    Exact matches are taken before any softened one so that a lenient tier can
+    never steal a gold edit from the hypothesis edit that got it right, which
+    would leave both scored as errors.
+    """
+    matched = {key: key for key in hyp_edits if key in gold_edits}
+    if equivalent is None:
+        return matched
+
+    free = [key for key in gold_edits if key not in matched]
+    for key in hyp_edits:
+        if key in matched:
+            continue
+        start, end, replacement = key
+        for candidate in free:
+            if (candidate[0], candidate[1]) != (start, end):
+                continue
+            if equivalent(candidate[2], replacement):
+                matched[key] = candidate
+                free.remove(candidate)
+                break
+    return matched
+
+
 def score(
     gold: Sequence[M2Sentence],
     hypothesis: Sequence[M2Sentence],
     beta: float = 0.5,
     mode: str = "correction",
     annotator: int = 0,
+    equivalent: Callable[[str, str], bool] | None = None,
 ) -> ErrantScore:
     """Compare a hypothesis annotation with a gold one.
 
@@ -104,6 +135,9 @@ def score(
         beta: F-score beta.
         mode: ``"correction"`` or ``"detection"``.
         annotator: Which gold annotator to score against.
+        equivalent: Optional softened equality on replacement text, from
+            :mod:`langlm.eval.leniency`. Meaningless in detection mode, where
+            the replacement is not compared at all.
 
     Raises:
         ValueError: if the two sequences differ in length or in their sources,
@@ -127,16 +161,18 @@ def score(
             )
         gold_edits = _keys(gold_sentence.edits_for(annotator), mode)
         hyp_edits = _keys(hyp_sentence.edits_for(), mode)
+        matched = _pair(gold_edits, hyp_edits, equivalent if mode == "correction" else None)
 
         for key, hyp_type in hyp_edits.items():
-            if key in gold_edits:
+            if key in matched:
                 overall = overall + Counts(tp=1)
-                bucket(gold_edits[key], 0)
+                bucket(gold_edits[matched[key]], 0)
             else:
                 overall = overall + Counts(fp=1)
                 bucket(hyp_type, 1)
+        found = set(matched.values())
         for key, gold_type in gold_edits.items():
-            if key not in hyp_edits:
+            if key not in found:
                 overall = overall + Counts(fn=1)
                 bucket(gold_type, 2)
 

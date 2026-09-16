@@ -1,0 +1,19 @@
+{
+  "system": "iter4-cw025-dpo-b5",
+  "f0.5": 0.6895,
+  "precision": 0.7096,
+  "recall": 0.6193,
+  "overcorrection_rate": 0.125,
+  "detection_f": 0.7255,
+  "correction_f": 0.6008,
+  "lenient_f0.5": 0.6944,
+  "lenient_correction_f": 0.6052,
+  "baseline_bar": 0.7072,
+  "explanation": {
+    "coverage": 0.8288,
+    "precision": 0.9236,
+    "type_accuracy": 0.675,
+    "rewrites": 5939,
+    "claims": 5774
+  }
+}

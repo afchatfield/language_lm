@@ -84,13 +84,12 @@ def test_unrelated_deletes_and_inserts_are_not_paired() -> None:
 
 def test_records_round_trip_to_the_correction() -> None:
     """Applying the edits to the source must give the annotator's target back."""
-    from langlm.baselines.finetuned import GenerationFaults, apply_edits
+    from langlm.train.format import apply_edits
 
-    faults = GenerationFaults()
     for record in list(learner.records(limit=200)):
         if not record["edits"]:
             continue
-        rebuilt = apply_edits(record["source"].split(), record["edits"], faults)
+        rebuilt = apply_edits(record["source"].split(), record["edits"])
         assert rebuilt == record["target"]
 
 
@@ -136,3 +135,25 @@ def test_explicit_templates_cover_the_volume() -> None:
     explicit = set(load_types()["explicit"])
     for error_type in ("R:SPELL", "R:DET:FORM", "M:PUNCT", "R:ORTH", "R:WO"):
         assert error_type in explicit
+
+
+def test_explanations_are_derived_from_the_correction_not_from_a_claimed_type() -> None:
+    """The learner-facing type comes from the two sentences, not from the model.
+
+    A model that corrects well but names its edit wrongly would otherwise hand
+    the learner an explanation of an error that was never made.
+    """
+    from langlm.explanations import explain_correction
+
+    explained = explain_correction("Ich sehe der Frau .", "Ich sehe die Frau .")
+    assert len(explained) == 1
+    edit = explained[0]
+    assert (edit.wrong, edit.right) == ("der", "die")
+    assert edit.error_type.startswith("R:DET")
+    assert edit.explanation.strip()
+
+
+def test_an_unchanged_sentence_explains_nothing() -> None:
+    from langlm.explanations import explain_correction
+
+    assert explain_correction("Das ist richtig .", "Das ist richtig .") == []

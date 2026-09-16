@@ -35,10 +35,15 @@ training:
   # this times `gradient_accumulation`.
   batch_size: 16
   gradient_accumulation: 2
-  # Sequences longer than this are dropped, not truncated: a truncated answer
-  # is invalid JSON, and teaching the model to emit that is worse than dropping
-  # the example. The corpus tops out at 339 tokens, so nothing is lost.
-  max_length: 512
+  # Sequences longer than this are dropped, not truncated: teaching the model to
+  # stop mid-answer is worse than dropping the example. The cost of a low cap is
+  # not how many records it drops but which -- it takes them from the many-edit
+  # tail. Under the old span schema, 512 dropped 4% of the corpus and with it
+  # 100% of the 9-edit examples and 97% of the 8-edit ones, so the model never
+  # saw a sentence with more than seven edits while Falko-MERLIN dev has 107 of
+  # them. The schema in `langlm.train.format` is less than half as long, and at
+  # 1024 the corpus loses 4 records out of 29,237.
+  max_length: 1024
   seed: 20260909
   # Held out from the generated corpus, to watch for overfitting during the
   # run. The number that matters is still Falko-MERLIN dev, which is real
@@ -47,6 +52,10 @@ training:
   logging_steps: 25
   eval_steps: 250
   save_steps: 500
+  # Keep more than the last two. The iteration-2 run's evaluation loss bottomed
+  # at step 1,750 of 2,694 and was flat after it, so the final checkpoint is not
+  # reliably the best one and a limit of 2 would have thrown the best one away.
+  save_total_limit: 6
 
 output:
   # Adapter weights, not a merged model. Phase 4 does surgery on the base

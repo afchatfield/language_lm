@@ -66,8 +66,24 @@ def tokenize(text: str) -> str:
     full stop attached to the last word. The corpus counts tokens, so an output
     that is not tokenised the same way scores as a whole extra edit on every
     sentence that ends in punctuation.
+
+    Only the tokenizer runs, not the pipeline behind it. Nothing in
+    ``de_core_news_sm`` retokenises -- the tagger and parser annotate the
+    tokenizer\'s output rather than revising it -- so the tokens are the ones
+    ``annotator.parse`` would produce, at a hundredth of the cost. That matters
+    because the Phase 2 corpus build tokenises every sentence it reads.
     """
-    return " ".join(tok.text for tok in _nlp()(text) if not tok.is_space)
+    return " ".join(tok.text for tok in _nlp().tokenizer(text) if not tok.is_space)
+
+
+@cache
+def parse(text: str):
+    """Tag and lemmatise a fragment, for callers that need more than tokens.
+
+    Cached because the callers are scorers, which ask about the same handful of
+    replacement strings over and over as they compare two annotations.
+    """
+    return [token for token in _nlp()(text) if not token.is_space]
 
 
 def annotate(source: str, hypothesis: str) -> list[Edit]:

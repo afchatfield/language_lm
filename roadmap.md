@@ -148,10 +148,17 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 > matches, with the dominant one saying only "Möglicher Tippfehler gefunden". The
 > explanations are keyed on our own corruptors instead, which know what they did.
 >
-> One debt: six of the fifteen `reference:` fields in `rules/de.yaml` are `null` because the
-> Rat für deutsche Rechtschreibung paragraph has not been checked. A wrong citation in 30k
-> examples would teach the model to cite confidently and wrongly, so they are omitted rather
-> than guessed. Verify before Phase 3.
+> ~~One debt: six of the fifteen `reference:` fields in `rules/de.yaml` are `null` because the
+> Rat für deutsche Rechtschreibung paragraph has not been checked.~~ **Settled, and the debt
+> was pointed the wrong way.** The nulls were harmless -- 17 of the 25 rules are grammar, which
+> the Regelwerk does not legislate at all. Three of the five *filled-in* numbers were wrong:
+> the 2024 edition renumbered part E, so the subordinate-clause comma moved § 74 → § 73 and the
+> und/oder rule § 72 → § 71, while `comma_after_fronted` cited a paragraph about something else
+> and has no citation to make. Now 8 cited and verified against the official PDF by
+> `make check-citations`, 17 carrying a note saying why no citation exists, and the edition
+> pinned in the file and rendered into every citation. It cost the model nothing -- explanation
+> prose was never in the SFT target -- so no retraining is implied.
+> `reports/phase2/citations.md`.
 
 ---
 
@@ -168,8 +175,33 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 - [ ] Evaluate → read per-error-type breakdown → fix data in Phase 2 → retrain
   - [x] Iteration 1 — synthetic-only data. **F0.5 0.1891**, worse than the
         untrained baseline on 14 of 15 error types. See the outcome note.
-  - [ ] Iteration 2 — real learner errors as the primary signal
-  - [ ] Iteration 3
+  - [x] Iteration 2 — real learner errors as the primary signal. **F0.5 0.6944**,
+        which clears the few-shot bar of 0.5102 and the exit criterion with it.
+  - [x] Iteration 3 — corruptors widened from 8 error types to 17. **F0.5 0.6960**,
+        a delta of +0.0016 whose 95% interval straddles zero. The coverage
+        argument was wrong and `reports/phase3/ablations.md` §5 says why.
+  - [x] Iteration 4 — the `changes` list down-weighted in the loss, since it is
+        70% of the supervised tokens and F0.5 never reads it. **F0.5 0.7019** at
+        weight 0.5 and **0.7072** at 0.25, with overcorrection down to 9.8%.
+  - [x] Iteration 5 — back-translated errors: a generator trained on Falko read
+        backwards, run over clean German, to reach the types no rule can write.
+        Predicted 0.72–0.74 in `reports/phase3/headroom.md`; **got 0.7056**,
+        below the 0.7072 bar. Recall rose (0.6174 → 0.6287) and precision paid
+        for it. The second wrong prediction in a row, written up as wrong.
+  - [x] `changes_weight` below 0.25 — **the trend turned over.** 1.0 → 0.5 →
+        0.25 → 0.125 gives 0.6944 → 0.7019 → 0.7072 → 0.7068. 0.25 is the
+        optimum and this line is closed.
+  - [x] N-best rerank with a minimum-edit prior — **+0.0007 over beam top-1**,
+        retired along with MBR and a learned reranker. What survives is beam
+        search itself at +0.0084 for 5x generation, which is a serving cost
+        decision rather than an open question. `reports/phase3/nbest.md`.
+  - [x] Iteration 6 — DPO on gold-labelled pairs from the model's own beam, the
+        one channel `nbest.md` left open. **Negative on both checkpoints**:
+        0.7072 → 0.6895 and 0.7056 → 0.6905, and tightening the KL anchor walks
+        F0.5 monotonically back toward the untrained reference without ever
+        passing it. `reports/phase3/dpo.md`.
+  - [ ] Still unspent: cLang-8 German (machine-generated targets, so distillation
+        rather than gold — declined on the same grounds it always was).
 
 > **Iteration 1: the synthetic corpus made the model worse.** F0.5 0.1891 against
 > few-shot's 0.5102 and zero-shot's 0.2571 — precision 0.25, so three edits in four
@@ -197,6 +229,40 @@ starting with German, extending to Spanish, running locally on a 16GB M1.
 **Exit criterion:** beat the LT baseline on F0.5, **or** match it with substantially better
 explanations. Overcorrection rate under control.
 
+- [x] **Held-out test split read**, once, for five models. `reports/phase3/test.md`.
+      Six iterations of dev tuning did not overfit it: every model lands within 0.005
+      of its dev score, mean absolute gap 0.0024. **Phase 4 compresses `iter4-cw025`
+      — F0.5 0.7060, overcorrection 9.5% on test.** The three SFT models are one
+      model with three names (they span 0.0023 and the ranking *inverts* between
+      splits), so the choice was made on overcorrection, where a 4.5-point gap
+      replicates across both.
+- [ ] Re-run the Phase 1 baselines on test before any README claim.
+      `scripts/run_baselines.py` is hard-wired to dev, so "beats LanguageTool by
+      0.29" currently compares a test row against a dev baseline.
+
+> **Met at iteration 2 and held since.** F0.5 0.7072 against LanguageTool's 0.4134 and
+> few-shot's 0.5102, overcorrection 9.8% against LanguageTool's 28.7%. The contingency
+> below did not fire.
+>
+> What the four iterations cost is worth recording next to what they bought. Iterations 3
+> and 4 moved F0.5 by +0.0016 and +0.0112 respectively, and the larger of those came from
+> the loss function rather than from the data — after a full data iteration aimed at
+> coverage returned nothing. `reports/phase3/ablations.md` has the four serving-side
+> changes that returned nothing either.
+>
+> The error budget is in `reports/phase3/headroom.md`. Short version: detection is
+> finished — 3.4% of gold edits sit in a sentence the model never enters, and 1,118 of
+> 1,970 sentences needing correction come back byte-identical to the annotator's. What is
+> left is German competence inside spans the model has already found.
+>
+> **Four more things were tried after that note and none of them moved it.** Iteration 5's
+> back-translation, `changes_weight` 0.125, the n-best rerank, and DPO on the model's own
+> beam. The last one matters most: `nbest.md` had shown no *selector* reaches the 0.8380
+> oracle, and `dpo.md` shows no *optimiser* reaches it either, on pairs drawn from that
+> same gap with gold labels. The oracle gap is a measurement of the model's uncertainty
+> and is now retired as a source of headroom. Past this point the base model is the
+> binding constraint, which is the constraint Phase 4 exists not to relax.
+
 > ⚠️ If after three data iterations you still can't beat LT, stop grinding. Pivot the framing to
 > "small local model matching a mature rule-based system, with explanations, at 600MB offline."
 > That is still a good project. Owning it beats pretending on a CV.
@@ -208,33 +274,82 @@ explanations. Overcorrection rate under control.
 
 **Check first, before spending GPU hours:**
 
-- [ ] Trim a base model's vocab *without* training, confirm `mlx-lm` and `llama.cpp` still convert it
-- [ ] Standard HF format, `vocab_size` correctly updated in config
+- [x] Trim a base model's vocab *without* training, confirm `llama.cpp` still converts it
+      — passes. GGUF f16 and Q4_K_M both convert and run. **`mlx-lm` is untested: it is
+      Apple-Silicon only and the trim ran on the Linux/CUDA box, so this half has to be
+      run on the M1** before the gate is fully passed.
+- [x] Standard HF format, `vocab_size` correctly updated in config — all four artefacts
+      agree at 39,399 (config, `embed_tokens`, `lm_head`, and *both* tokenizer files).
+
+> **Gate outcome: `reports/phase4/gate.md`.** 128,000 → 39,399 rows, **21.9% of parameters
+> and 726 MB at bf16**, against Phase 0's predicted 21.4% / 708 MB. At Q4_K_M the trimmed
+> model is **755 MB against the 600 MB target**, so the depth prune has to find another
+> **155 MB** or the target moves.
+>
+> **The gate caught a real defect.** Counting coverage on prose alone deleted the JSON
+> structural tokens — `▁{`, `▁[`, `}]`, `:"` — because they barely occur in news and
+> Wikipedia. The checkpoint converted cleanly, passed every structural check, corrected
+> German correctly, and returned it as *bare text with no schema*. The trim now counts the
+> task corpus too; `--no-task-data` reproduces the failure. **A vocabulary trim has to be
+> counted over everything the deployed model reads or writes** — which Phase 5 must repeat
+> for Spanish, where the same mistake would again look like success.
 
 **Then:**
 
-- [ ] Vocab trim on the base model
-  - [ ] Tokenize German+English corpus, frequency threshold
-  - [ ] Keep all specials and byte-fallbacks
-  - [ ] Slice embedding + LM head rows
-  - [ ] Remap token IDs
-  - [ ] Rebuild tokenizer merge table consistently with trimmed vocab
-- [ ] Heal: short LM-objective finetune on German text
-- [ ] Task SFT on trimmed model, same Phase 3 recipe
-- [ ] Depth prune (second experiment)
-  - [ ] Layer-wise input/output cosine similarity
-  - [ ] Sweep 2 / 4 / 6 dropped layers → quality-vs-size *curve*, not a single point
-  - [ ] Heal each with LoRA
+- [x] Vocab trim on the base model — 128,000 → 39,399 rows
+  - [x] Tokenize German+English corpus, frequency threshold
+  - [x] Keep all specials and byte-fallbacks
+  - [x] Slice embedding + LM head rows
+  - [x] Remap token IDs
+  - [x] Rebuild tokenizer merge table consistently with trimmed vocab (260,662 → 89,212)
+- [x] ~~Heal: short LM-objective finetune on German text~~ — **dropped.** There was no
+      damage to repair: the trim is free. Healing *cost* 0.0070 of F0.5, buying 2.3pp of
+      overcorrection by making the model more conservative.
+- [x] Task SFT on trimmed model, same Phase 3 recipe — run as the depth-sweep control
+- [x] Depth prune (second experiment)
+  - [x] Layer-wise input/output cosine similarity — edges do the work (L0 0.309, L23 0.500);
+        the 22 interior layers are near-uniform at 0.924 ± 0.035
+  - [x] Sweep 2 / 4 / 6 dropped layers → curve, not a point
+  - [x] ~~Heal each with LoRA~~ — a full re-SFT each, because the adapter does **not**
+        survive layer removal at all (see the outcome note)
 
-**Ablation table to report:**
+**Ablation table:**
 
 | Variant | F0.5 | Overcorrection % | Size | tok/s (M1) |
-|---|---|---|---|---|
-| Uncompressed | | | | |
-| Vocab-trimmed | | | | |
-| Vocab-trimmed + depth-pruned | | | | |
+|---|---:|---:|---:|---|
+| Uncompressed | 0.7072 | 9.8% | 997 MB | not measured |
+| **Vocab-trimmed** | **0.7061** | **9.5%** | **755 MB** | not measured |
+| Vocab-trimmed + depth-pruned (−6) | 0.6591 | 16.8% | **593 MB** | not measured |
 
-**Exit criterion:** defensible claim, e.g. "25% parameter reduction for X points of F0.5."
+`tok/s (M1)` is unmeasured because the work ran on the Linux/CUDA box; it belongs with
+the outstanding MLX conversion.
+
+**Exit criterion:** ✅ two claims, `reports/phase4/compression.md`.
+
+> **21.9% fewer parameters and 24.2% smaller (997 → 755 MB) for 0.0011 of F0.5** — free
+> within measurement error, with **no healing and no retraining**, because the LoRA targets
+> no vocabulary-dimension module and so stays valid on a trimmed base.
+>
+> **39.0% fewer parameters and 40.5% smaller (997 → 593 MB) for 0.046 of F0.5** — the
+> 600 MB offline target, met. Phase 0 predicted the trim would land near 782 MB and that
+> the depth prune would have to close the gap; it landed at 755 MB and the prune closed it.
+>
+> **Depth pruning does not survive without re-training, and the vocabulary trim did.**
+> Reusing the Phase 3 adapter on a depth-pruned base produces a model that emits no schema
+> at all — free prose at 2 layers dropped, degenerate repetition at 6. It survives losing
+> 69% of the vocabulary but not 8% of the depth.
+>
+> **The control earned its keep.** Read naively the first prune point looks like it nearly
+> doubles overcorrection (9.5% → 16.5%); the zero-layer control on the same corpus is
+> already at 14.5%. Five of those six points belong to iteration 5's back-translation
+> corpus, not to pruning — which is a **second, independent verdict on iteration 5**:
+> F0.5-neutral again, but costing 5.0pp of overcorrection. Phase 3 called it null; it was
+> negative, and `reports/phase3/dpo.md` understated it.
+>
+> **Recommendation: ship the vocabulary-trimmed model at 755 MB** unless 600 MB is hard.
+> It is the best row on both metrics that matter and costs nothing to produce. Caveat: the
+> depth rows may be pessimistic by ~5pp of overcorrection, since corpus A no longer exists
+> to re-train them on.
 
 ---
 

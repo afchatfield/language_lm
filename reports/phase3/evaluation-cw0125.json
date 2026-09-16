@@ -1,0 +1,19 @@
+{
+  "system": "cw0125",
+  "f0.5": 0.7068,
+  "precision": 0.7289,
+  "recall": 0.6304,
+  "overcorrection_rate": 0.1325,
+  "detection_f": 0.7453,
+  "correction_f": 0.6241,
+  "lenient_f0.5": 0.7118,
+  "lenient_correction_f": 0.629,
+  "baseline_bar": 0.7072,
+  "explanation": {
+    "coverage": 0.8579,
+    "precision": 0.9292,
+    "type_accuracy": 0.7202,
+    "rewrites": 5882,
+    "claims": 5792
+  }
+}

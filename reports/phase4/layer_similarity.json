@@ -1,0 +1,134 @@
+{
+  "base": "checkpoints/base-trimmed",
+  "sentences": 512,
+  "layers": [
+    {
+      "index": 0,
+      "similarity": 0.3094241018896657
+    },
+    {
+      "index": 1,
+      "similarity": 0.9229597840382087
+    },
+    {
+      "index": 2,
+      "similarity": 0.9404028518031425
+    },
+    {
+      "index": 3,
+      "similarity": 0.9426178445351976
+    },
+    {
+      "index": 4,
+      "similarity": 0.9314044438291686
+    },
+    {
+      "index": 5,
+      "similarity": 0.9336886550841005
+    },
+    {
+      "index": 6,
+      "similarity": 0.9165916799335502
+    },
+    {
+      "index": 7,
+      "similarity": 0.8731224475669689
+    },
+    {
+      "index": 8,
+      "similarity": 0.9102235758288918
+    },
+    {
+      "index": 9,
+      "similarity": 0.9131307537897141
+    },
+    {
+      "index": 10,
+      "similarity": 0.9190143282342355
+    },
+    {
+      "index": 11,
+      "similarity": 0.9307814771232782
+    },
+    {
+      "index": 12,
+      "similarity": 0.9343808403128677
+    },
+    {
+      "index": 13,
+      "similarity": 0.9425486260123209
+    },
+    {
+      "index": 14,
+      "similarity": 0.9432408112410882
+    },
+    {
+      "index": 15,
+      "similarity": 0.9406797258946494
+    },
+    {
+      "index": 16,
+      "similarity": 0.9273897695023188
+    },
+    {
+      "index": 17,
+      "similarity": 0.9046860939987541
+    },
+    {
+      "index": 18,
+      "similarity": 0.9006714196719042
+    },
+    {
+      "index": 19,
+      "similarity": 0.907177960822316
+    },
+    {
+      "index": 20,
+      "similarity": 0.9267668027964283
+    },
+    {
+      "index": 21,
+      "similarity": 0.9367342700906762
+    },
+    {
+      "index": 22,
+      "similarity": 0.9388108257769779
+    },
+    {
+      "index": 23,
+      "similarity": 0.5003460926143836
+    }
+  ],
+  "windows": {
+    "2": {
+      "start": 13,
+      "layers": [
+        13,
+        14
+      ],
+      "similarity": 0.9428947186267045
+    },
+    "4": {
+      "start": 12,
+      "layers": [
+        12,
+        13,
+        14,
+        15
+      ],
+      "similarity": 0.9402125008652316
+    },
+    "6": {
+      "start": 11,
+      "layers": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "similarity": 0.9365035416810872
+    }
+  }
+}
