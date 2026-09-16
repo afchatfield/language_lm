@@ -315,14 +315,22 @@ explanations. Overcorrection rate under control.
 
 **Ablation table:**
 
-| Variant | F0.5 | Overcorrection % | Size | tok/s (M1) |
-|---|---:|---:|---:|---|
-| Uncompressed | 0.7072 | 9.8% | 997 MB | not measured |
-| **Vocab-trimmed** | **0.7061** | **9.5%** | **755 MB** | not measured |
-| Vocab-trimmed + depth-pruned (−6) | 0.6591 | 16.8% | **593 MB** | not measured |
+| Variant | F0.5 | Overcorrection % | Size | tok/s (M1) | Peak RSS |
+|---|---:|---:|---:|---:|---:|
+| Uncompressed | 0.7072 | 9.8% | 997 MB | not measured | not measured |
+| **Vocab-trimmed** | **0.7061** | **9.5%** | **755 MB** | **62.3 ± 0.7** | **477 MB** |
+| Vocab-trimmed + depth-pruned (−6) | 0.6591 | 16.8% | **593 MB** | 79.2 ± 3.6 | 379 MB |
 
-`tok/s (M1)` is unmeasured because the work ran on the Linux/CUDA box; it belongs with
-the outstanding MLX conversion.
+`tok/s (M1)` is `tg128`, `llama-bench -p 512 -n 128 -r 5`, llama.cpp b29c606e2 (10964),
+Q4_K_M on Metal, M1 / 16 GB. Prompt processing is `pp512` 651.5 ± 8.2 vs 865.6 ± 20.8.
+At sentence shape (`-p 64 -n 32`) the gap widens slightly: 62.3 / 573.8 vs 83.0 / 801.6,
+so a 64-token prompt and a 32-token correction take **625 ms** against **465 ms**. Peak RSS
+is `/usr/bin/time -l` on a single `llama-cli` generation; weights are mmapped and unified,
+so it undercounts the file on disk. The uncompressed row was never converted to GGUF.
+
+The depth prune is worth a genuine **+27% tok/s and −21% resident memory** — and it buys
+160 ms on an operation already far under a second, well past typing speed. Speed is not
+the axis this decision turns on; overcorrection is.
 
 **Exit criterion:** ✅ two claims, `reports/phase4/compression.md`.
 
@@ -372,9 +380,12 @@ Say so honestly in the README rather than hiding it.
 ## Phase 6 — Package and ship
 *~1 week*
 
-- [ ] Quantise to 4-bit
-- [ ] Convert to MLX and GGUF
-- [ ] Benchmark tokens/sec and peak memory on the M1
+- [x] Quantise to 4-bit — Q4_K_M, on the H200, for both compression variants
+- [x] ~~Convert to MLX and~~ GGUF — **MLX dropped.** Quantisation ran on the H200 and
+      GGUF already executes on Metal at 62 tok/s; a second Apple-only format would buy
+      nothing this project needs to claim, and costs a conversion path to maintain.
+- [x] Benchmark tokens/sec and peak memory on the M1 — 62.3 tok/s / 477 MB at 755 MB,
+      79.2 tok/s / 379 MB at 593 MB. Numbers and method in the Phase 4 table.
 - [ ] Demo app (local, or WASM/browser for the flashier artifact)
 - [ ] README
   - [ ] **Lead with the results table**
