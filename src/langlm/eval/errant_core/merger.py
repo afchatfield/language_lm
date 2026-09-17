@@ -1,4 +1,4 @@
-"""Rule-based edit merging for German.
+"""Rule-based edit merging, shared across languages.
 
 An alignment between two sentences is a sequence of token-level operations, and
 merging decides which runs of them describe one error rather than several.
@@ -6,15 +6,24 @@ merging decides which runs of them describe one error rather than several.
 Frau kommt]`` is three. Getting this wrong changes the denominator of every
 score.
 
-Adapted from ERRANT's English merger (Bryant et al., 2017; MIT licensed). The
-structure and thresholds are theirs. What changes for German:
+Adapted from ERRANT's English merger (Bryant et al., 2017; MIT licensed) for
+German, and moved here unchanged when Phase 5 ported Spanish, because nothing
+in it actually reads German: every rule is keyed on universal POS tags and
+dependency labels, not a lexicon. What changed from the English original, when
+this was German-only, was:
 
 * The possessive-suffix rules are gone. They keyed off the Penn tag ``POS``,
   which the German tagset has no equivalent of -- German marks the genitive on
   the noun itself.
 * The auxiliary/particle merge covers German separable prefixes and the ``zu``
-  of an infinitive group, both tagged ``PART``, which is what lets
-  ``[bereiten vor -> vorbereiten]`` come out as a single edit.
+  of an infinitive group, both tagged ``PART`` -- a universal tag Spanish's
+  ``ir a + infinitive`` and clitic-climbing constructions also use, which is
+  the reason this rule was safe to keep rather than to fork.
+
+If a Spanish construction ever needs a rule this shape cannot express, it
+belongs here as a new branch keyed on a universal tag, not as a per-language
+fork of the file: the whole point of moving it was that one rule set serves
+every language ERRANT's alignment already tags consistently.
 """
 
 from __future__ import annotations

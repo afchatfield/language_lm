@@ -42,11 +42,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-#: The instruction. English, like the rest of the scaffolding, because the
-#: reader is learning German. Kept short: a base model pays for every prompt
-#: token on every example, and 30,000 examples make a long instruction
-#: expensive.
-INSTRUCTION = "Correct the German sentence, then list what changed."
+#: The instruction, per language. English, like the rest of the scaffolding,
+#: because the reader is learning the target language, not English. Kept
+#: short: a base model pays for every prompt token on every example, and
+#: 30,000 examples make a long instruction expensive.
+INSTRUCTION = {
+    "de": "Correct the German sentence, then list what changed.",
+    "es": "Correct the Spanish sentence, then list what changed.",
+}
 
 SOURCE_PREFIX = "Input:"
 TARGET_PREFIX = "Output:"
@@ -65,9 +68,14 @@ CHANGES_MARKER = ', "changes":'
 MAX_ANCHOR_CONTEXT = 3
 
 
-def build_prompt(source: str) -> str:
-    """The part the model is given."""
-    return f"{INSTRUCTION}\n\n{SOURCE_PREFIX} {source}\n{TARGET_PREFIX}"
+def build_prompt(source: str, language: str = "de") -> str:
+    """The part the model is given.
+
+    `language` defaults to German -- Phase 3 was here first -- so every
+    existing call site (`train_sft.py`, the baselines, `scripts/correct.py`,
+    the tests) is unchanged. Phase 5 passes `language="es"` explicitly.
+    """
+    return f"{INSTRUCTION[language]}\n\n{SOURCE_PREFIX} {source}\n{TARGET_PREFIX}"
 
 
 def apply_edits(tokens: Sequence[str], edits: list[dict[str, Any]]) -> str:
@@ -167,6 +175,7 @@ def encode(
     tokenizer,
     max_length: int = 1024,
     changes_weight: float = 1.0,
+    language: str = "de",
 ) -> Encoded | None:
     """Tokenise one record into ids, a masked label sequence and token weights.
 
@@ -190,11 +199,14 @@ def encode(
             in :mod:`langlm.eval.explanation_scorer`, and generating it may well
             be what makes the model attend to its own edits -- so this is a dial
             rather than a switch.
+        language: One prompt per training file, not per record -- a corpus is
+            all one language -- so `train.data.build` passes this once for the
+            whole file rather than each caller repeating it.
 
     Returns:
         The encoded example, or None if it does not fit.
     """
-    prompt = build_prompt(record["source"])
+    prompt = build_prompt(record["source"], language)
     answer = build_target(record)
 
     prompt_ids = tokenizer(prompt, add_special_tokens=True)["input_ids"]

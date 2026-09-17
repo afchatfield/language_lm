@@ -83,13 +83,23 @@ def main() -> None:
         action="store_true",
         help="Check the mask and one forward pass, then stop without training",
     )
+    parser.add_argument(
+        "--language",
+        default="de",
+        choices=["de", "es"],
+        help="Which language's config, prompt instruction and training file to use. "
+        "German kept as the default so every existing invocation is unchanged.",
+    )
     args = parser.parse_args()
 
     import torch
     from peft import LoraConfig, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 
-    config = load_config("phase3")
+    # `configs/phase3.yaml` stays unsuffixed -- German was here first, and the
+    # documented H200 runbook (`docs/h200.md`) and `make phase3` both name it
+    # directly. A second language gets its own `phase3_<lang>.yaml`.
+    config = load_config("phase3" if args.language == "de" else f"phase3_{args.language}")
     model_cfg, lora_cfg, train_cfg = config["model"], config["lora"], config["training"]
     device = device_name()
     print(f"device: {device}")
@@ -115,6 +125,7 @@ def main() -> None:
         seed=train_cfg["seed"],
         limit=args.limit,
         changes_weight=changes_weight,
+        language=args.language,
     )
     print(f"train {sizes.train:,} | validation {sizes.validation:,} | dropped {sizes.dropped:,}")
     report_mask(train_set[0], tokenizer)

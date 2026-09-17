@@ -1,0 +1,104 @@
+# Spanish explanation templates.
+#
+# Keyed on the corruptor that made the error, exactly as `rules/de.yaml` is --
+# see that file's header for why: the corruptor knows what it did, and a
+# generic grammar-checker message ("possible error found") is true and useless
+# for the same reason it was for German.
+#
+# Explanations are English on purpose, same as German's: the reader is
+# learning Spanish, and an explanation they cannot read explains nothing.
+#
+# Placeholders: {wrong} is what the learner wrote, {right} the correction.
+#
+# `rules/de.yaml` cites the Rat für deutsche Rechtschreibung, checked
+# paragraph by paragraph against the official text by `check_citations.py`.
+# This file has no `languagetool:` refinement section and no citation
+# apparatus -- both are real, separate work (an LT Spanish rule-id survey
+# mirroring `lt_rule_survey.md`, and whatever the RAE equivalent of a checkable
+# numbered ruleset would be) that Phase 5's corruptor build did not do. Left
+# for later rather than faked with an unverified citation, on the same
+# principle Phase 2 already established: a wrong citation is worse than none.
+
+corruptors:
+  drop_accent:
+    error_type: R:ORTH
+    explanation: >-
+      The stress mark is part of the word, not decoration on it. «{wrong}» and
+      «{right}» are written differently for a reason -- Spanish marks stress in
+      writing precisely where it would otherwise be unpredictable. Write
+      «{right}».
+
+  keyboard:
+    error_type: R:SPELL
+    explanation: >-
+      «{wrong}» is not a Spanish word. It looks like a slip for «{right}».
+
+  drop_inverted_punctuation:
+    error_type: M:PUNCT
+    explanation: >-
+      Spanish marks a question or an exclamation at both ends, not just the
+      end the way English does. Add the opening mark.
+
+  article_form:
+    error_type: R:DET:FORM
+    explanation: >-
+      The article has to agree with its noun in gender and number. «{wrong}»
+      does not fit here; the form the sentence needs is «{right}».
+
+  drop_article:
+    error_type: M:DET
+    explanation: >-
+      Spanish nouns almost always need an article, even where English drops
+      it. Add «{right}» before the noun.
+
+  adjective_form:
+    error_type: R:ADJ:FORM
+    explanation: >-
+      An adjective has to agree with the noun it describes in gender and
+      number. Here it should read «{right}», not «{wrong}».
+
+  preposition:
+    error_type: R:ADP
+    explanation: >-
+      Spanish prepositions are not chosen by translating the English one.
+      This phrase takes «{right}» rather than «{wrong}».
+
+  drop_preposition:
+    error_type: M:ADP
+    explanation: >-
+      This phrase needs «{right}». Which preposition a Spanish verb governs is
+      often not predictable from the English one -- «pensar en», «soñar con» --
+      so it has to be learned with the verb rather than translated.
+
+  redundant_subject_pronoun:
+    error_type: U:PRON
+    explanation: >-
+      Spanish verb endings already say who the subject is, so the pronoun is
+      not needed here the way it would be in English. Remove «{wrong}» -- or
+      keep it only if the sentence is deliberately emphasising or contrasting
+      who is doing the action.
+
+  drop_object_clitic:
+    error_type: M:PRON
+    explanation: >-
+      An object pronoun is missing here. Spanish does not leave it out the way
+      some constructions in English do; add «{right}».
+
+  ser_estar:
+    error_type: R:AUX
+    explanation: >-
+      Spanish has two verbs for English "to be", and they are not
+      interchangeable. This is «{right}», not «{wrong}».
+
+  subjunctive_for_indicative:
+    error_type: R:AUX:FORM
+    explanation: >-
+      A clause opened by «que» after a verb of wanting, hoping or doubting
+      takes the subjunctive, not the indicative. It should read «{right}»,
+      not «{wrong}».
+
+  verb_infinitive:
+    error_type: R:VERB:FORM
+    explanation: >-
+      «{wrong}» is the infinitive -- the form a dictionary lists. A finite verb
+      has to agree with its subject, so this sentence needs «{right}».

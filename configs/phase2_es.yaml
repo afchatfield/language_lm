@@ -1,0 +1,44 @@
+# Phase 2 configuration, Spanish: the data pipeline.
+#
+# The Spanish counterpart of `configs/phase2.yaml`. Structure is identical;
+# every number is Spanish's own, not copied from German's.
+
+# --- clean source text -------------------------------------------------------
+clean_corpus:
+  # The same Leipzig samples pinned for the tokenizer fertility analysis
+  # (reports/phase0/tokenizer_fertility.csv) and the overcorrection set.
+  corpora: [spa_news_2023_100K, spa_wikipedia_2021_100K]
+  # Same margin over the target as German's: a corruptor that needs, say, a
+  # subordinate clause with `que` cannot use a sentence that has none, so the
+  # error-type distribution is bought out of headroom, not out of the raw count.
+  size: 60000
+  seed: 20260909
+
+# --- error injection ---------------------------------------------------------
+# Unlike German's, this block is **not** derived by `derive_injection_weights.py`
+# -- that script blends the real histogram with a trained system's per-type
+# recall, and there is no trained Spanish system yet to measure recall from.
+# This is the natural distribution over what `corruptors/es.py`'s 13 rules can
+# produce, read directly off `reports/phase5/error_type_histogram_es.md` and
+# renormalised over just those 13 types (54.9% of all real edits; the other
+# 45.1% -- `R:OTHER`, `U:DET`, `R:VERB`, `R:NOUN`, ... -- have no synthetic rule
+# and so cannot be weighted, only left to the real COWS-L2H half of the
+# training set to teach). Revisit with a derived version once a first-pass
+# model exists to measure recall against, the same way German's iteration 3
+# revisited its own first weighting.
+injection:
+  errors_per_sentence: [1, 4]
+  weights:
+    R:ORTH: 0.2100 # drop_accent
+    U:PRON: 0.1485 # redundant_subject_pronoun -- the pro-drop headline
+    R:SPELL: 0.0855 # keyboard
+    R:VERB:FORM: 0.0805 # verb_infinitive
+    R:DET:FORM: 0.0794 # article_form
+    M:ADP: 0.0744 # drop_preposition
+    R:ADP: 0.0725 # preposition (por/para headline)
+    M:PUNCT: 0.0619 # drop_inverted_punctuation
+    M:DET: 0.0617 # drop_article
+    R:ADJ:FORM: 0.0462 # adjective_form
+    R:AUX:FORM: 0.0330 # subjunctive_for_indicative
+    M:PRON: 0.0247 # drop_object_clitic
+    R:AUX: 0.0217 # ser_estar

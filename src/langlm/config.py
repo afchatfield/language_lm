@@ -27,6 +27,7 @@ SPLITS_DIR = DATA_DIR / "splits"
 
 # Specific artefact locations, named once here.
 FALKO_MERLIN_DIR = RAW_DIR / "falko_merlin"
+COWSL2H_DIR = RAW_DIR / "cowsl2h"
 LEIPZIG_DIR = RAW_DIR / "leipzig"
 NGRAMS_DIR = RAW_DIR / "ngrams"
 SPLIT_MANIFEST = SPLITS_DIR / "manifest.json"
@@ -54,6 +55,7 @@ def ensure_dirs() -> None:
         PROCESSED_DIR,
         SPLITS_DIR,
         FALKO_MERLIN_DIR,
+        COWSL2H_DIR,
         LEIPZIG_DIR,
         PHASE0_REPORT_DIR,
     ):

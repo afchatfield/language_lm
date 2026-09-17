@@ -28,6 +28,25 @@ class TemplateError(KeyError):
 
 
 @cache
+def _annotator(language: str):
+    """The ERRANT annotator module for one language, imported lazily.
+
+    `errant_de` and `errant_es` both expose `annotate(source, hypothesis)` in
+    the same shape -- see `langlm.eval.errant_core`, which is what makes them
+    the same shape to begin with -- so this dispatch is the only place that
+    needs to know there is more than one language. Imported lazily, and only
+    the language actually asked for, because each import loads a spacy model.
+    """
+    if language == "de":
+        from langlm.eval import errant_de as module
+    elif language == "es":
+        from langlm.eval import errant_es as module
+    else:
+        raise ValueError(f"No ERRANT annotator for language {language!r}.")
+    return module
+
+
+@cache
 def load(language: str = "de", root: Path = RULES_DIR) -> dict:
     """The template file for a language."""
     path = Path(root) / f"{language}.yaml"
@@ -157,9 +176,8 @@ def explain_correction(source: str, correction: str, language: str = "de") -> li
     not claim are measurably worse than the ones it does. It is just no longer
     the thing the learner reads.
     """
-    from langlm.eval import errant_de
-
-    edits = errant_de.annotate(source, correction)
+    annotator = _annotator(language)
+    edits = annotator.annotate(source, correction)
     tokens = source.split()
     return [
         Explained(

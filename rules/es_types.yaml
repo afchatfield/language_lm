@@ -1,0 +1,140 @@
+# Explanations keyed on the ERRANT error type.
+#
+# Mirrors `rules/de_types.yaml` exactly in structure -- see that file's header
+# for the reasoning: this is the *real*-data path, for a COWS-L2H edit where
+# all we know is the type `errant_es` assigned, not which corruptor rule was
+# broken. `rules/es.yaml` stays the specific one.
+#
+# The explicit list below is calibrated to the real distribution, not carried
+# over from German's: `reports/phase5/error_type_histogram_es.md`, computed
+# over COWS-L2H train+dev, sets which types are worth writing by hand. Two
+# entries read very differently from their German counterparts because the
+# phenomenon is genuinely different, not just relabelled -- `U:PRON` is
+# German's *smallest* explicit entry (1.36% -- Wiederholung, not omission) and
+# Spanish's *largest* correctable one (8.15%, the pro-drop pattern
+# `redundant_subject_pronoun` targets); `R:ORTH` is stress marks here, not
+# capitalisation.
+#
+# Placeholders: {wrong} is what the learner wrote, {right} the correction,
+# {category} the word class from the type tag.
+
+# --- hand-written, for the types that carry the volume ----------------------
+# Down to roughly 1% of edits, the same cutoff `de_types.yaml` uses.
+explicit:
+  R:OTHER: >-
+    «{wrong}» is not the right word here. Spanish uses «{right}» in this
+    context.
+  # Deliberately does not name a cause, the same restraint `de_types.yaml`
+  # applies to its own R:ORTH: this covers stress marks, and occasionally a
+  # spacing or hyphenation convention the type does not distinguish.
+  R:ORTH: >-
+    This is a convention of written Spanish rather than a grammar rule. The
+    correct written form here is «{right}».
+  # The one entry with no real German counterpart. Spanish marks the subject
+  # on the verb ending, so writing it out again is the transfer error an
+  # English speaker (or a heritage speaker whose home Spanish leans on
+  # English word order) makes, not an omission the way German's U:PRON is.
+  U:PRON: >-
+    Spanish verb endings already show who the subject is. «{wrong}» is not
+    needed here -- keep a subject pronoun only when the sentence is
+    deliberately contrasting or emphasising who is doing the action.
+  R:SPELL: >-
+    «{wrong}» is not spelled correctly. It should be «{right}».
+  R:VERB:FORM: >-
+    The verb is in the wrong form. Check the tense, the person, and whether
+    the sentence needs the indicative or the subjunctive. It should be
+    «{right}».
+  R:DET:FORM: >-
+    The article has to agree with its noun in gender and number. Here that
+    makes it «{right}», not «{wrong}».
+  M:ADP: >-
+    A preposition is missing. This construction needs «{right}».
+  R:ADP: >-
+    Spanish prepositions are not chosen by translating the English one. This
+    phrase takes «{right}» rather than «{wrong}».
+  M:PUNCT: >-
+    A punctuation mark is missing here. Spanish punctuates by rule rather than
+    by ear -- including marking a question or exclamation at the opening «¿»
+    or «¡» as well as the close, which English does not -- and this sentence
+    needs «{right}».
+  M:DET: >-
+    A Spanish noun almost always needs an article, even where English drops
+    it. Add «{right}».
+  U:DET: >-
+    This article does not belong here. Remove «{wrong}».
+  R:VERB: >-
+    «{wrong}» is not the right verb here. Spanish uses «{right}» in this
+    context.
+  R:NOUN: >-
+    «{wrong}» is not the right noun here. Spanish uses «{right}» in this
+    context.
+  R:ADJ:FORM: >-
+    An adjective has to agree with the noun it describes in gender and
+    number. It should read «{right}».
+  U:OTHER: >-
+    «{wrong}» does not belong here. Remove it.
+  R:AUX:FORM: >-
+    The auxiliary is in the wrong form. It should be «{right}».
+  M:OTHER: >-
+    Something is missing here. Add «{right}».
+  U:ADP: >-
+    This preposition is not needed here. Remove «{wrong}».
+  U:PUNCT: >-
+    This punctuation mark does not belong here.
+  M:PRON: >-
+    A pronoun is missing. This sentence needs «{right}».
+  R:AUX: >-
+    Spanish has two verbs for English "to be", «ser» and «estar», and they
+    are not interchangeable. This is «{right}», not «{wrong}».
+  R:PRON:FORM: >-
+    This pronoun is in the wrong form. It should be «{right}».
+  R:DET: >-
+    «{wrong}» is not the right article here. Spanish uses «{right}» in this
+    context.
+  R:NOUN:FORM: >-
+    The noun is in the wrong form. Spanish marks gender and number on the
+    noun itself, so it should be «{right}».
+
+# --- composed, for the tail --------------------------------------------------
+categories:
+  DET: article
+  ADP: preposition
+  PRON: pronoun
+  NOUN: noun
+  PNOUN: proper name
+  VERB: verb
+  AUX: auxiliary verb
+  ADJ: adjective
+  ADV: adverb
+  CONJ: conjunction
+  SCONJ: subordinating conjunction
+  PUNCT: punctuation mark
+  NUM: number
+  OTHER: word
+
+operations:
+  M: >-
+    A {category} is missing here. Add «{right}».
+  R: >-
+    «{wrong}» is not the right {category} here. Use «{right}».
+  U: >-
+    The {category} «{wrong}» does not belong here. Remove it.
+  # `:FORM` types are about inflection rather than choice, which is a
+  # different thing to tell a learner: the word is right and its ending
+  # is not.
+  R:FORM: >-
+    The {category} «{wrong}» is in the wrong form. It should be «{right}».
+
+# A move -- the same word deleted in one place and inserted in another --
+# reaches us as two edits, because that is how ERRANT represents it. Both
+# edits of a pair get this instead of two contradictory-sounding "remove"
+# and "add" explanations.
+move: >-
+  «{word}» is in the wrong place in this sentence. Spanish fixes word order
+  more tightly than English does in some constructions, so it has to move
+  rather than stay where it is.
+
+#: Used when the type is unrecognisable -- ERRANT emits `R:*` for a handful of
+#: edits it cannot classify. Saying nothing specific is better than guessing.
+fallback: >-
+  This needs to be «{right}» rather than «{wrong}».

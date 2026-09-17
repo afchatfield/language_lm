@@ -29,7 +29,6 @@ import urllib.request
 
 from langlm.train.format import build_prompt, parse_answer
 
-
 #: Space before closing punctuation, and after opening punctuation. Display
 #: only: every comparison downstream runs on the tokenised form.
 _BEFORE = re.compile(r"\s+([.,;:!?%\u00bb\u201c\)\]\u2026])")
@@ -61,10 +60,7 @@ def _straight_quotes(text: str) -> str:
     parts = text.split('"')
     result = parts[0]
     for index, part in enumerate(parts[1:], start=1):
-        if index % 2:
-            result = f'{result}"{part.lstrip()}'
-        else:
-            result = f'{result.rstrip()}"{part}'
+        result = f'{result}"{part.lstrip()}' if index % 2 else f'{result.rstrip()}"{part}'
     return result
 
 
@@ -82,7 +78,9 @@ def correct(sentence: str, url: str, n_predict: int) -> dict:
     try:
         payload = json.load(urllib.request.urlopen(request))
     except urllib.error.URLError as error:
-        raise SystemExit(f"No server at {url}: {error.reason}. Start llama-server first.")
+        raise SystemExit(
+            f"No server at {url}: {error.reason}. Start llama-server first."
+        ) from error
     if "content" not in payload:
         raise SystemExit(f"Server error: {payload.get('error', payload)}")
     return payload
@@ -99,7 +97,11 @@ def explanations(source: str, correction: str, changes: list[dict]) -> list[tupl
     except Exception:
         # ERRANT needs its German model; the model's own list still carries types.
         return [
-            (c.get("was", ""), c.get("now", ""), explain_type(c.get("type", ""), c.get("was", ""), c.get("now", "")))
+            (
+                c.get("was", ""),
+                c.get("now", ""),
+                explain_type(c.get("type", ""), c.get("was", ""), c.get("now", "")),
+            )
             for c in changes
             if isinstance(c, dict)
         ]

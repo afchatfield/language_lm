@@ -13,6 +13,46 @@
         }
       }
     },
+    "clean_es": {
+      "frozen_at": "2026-09-17T12:01:01+00:00",
+      "source_url": "Leipzig Corpora Collection; see configs/phase2_es.yaml",
+      "splits": {
+        "all": {
+          "bytes": 11310920,
+          "edits": 0,
+          "path": "data/processed/clean_es/es.m2",
+          "sentences": 60000,
+          "sha256": "0000345cdc3bb5a8936b9b29b8db56c862bb580964f4882f09a185295463665c"
+        }
+      }
+    },
+    "cowsl2h": {
+      "frozen_at": "2026-09-17T01:38:21+00:00",
+      "source_url": "https://raw.githubusercontent.com/ucdaviscl/cowsl2h/6b18b773aef6d6da3b7796e9c26007981856e8e1",
+      "splits": {
+        "dev": {
+          "bytes": 727931,
+          "edits": 7563,
+          "path": "data/processed/cowsl2h/dev.m2",
+          "sentences": 4716,
+          "sha256": "40e801a16738cc70134588307dde8fc5c4a18ed53cb72f615b0eda171442830c"
+        },
+        "test": {
+          "bytes": 675334,
+          "edits": 7333,
+          "path": "data/processed/cowsl2h/test.m2",
+          "sentences": 4284,
+          "sha256": "43ee55034b343bfde20255029241a92165e6e8b217d99a696cd73d94db31cd47"
+        },
+        "train": {
+          "bytes": 6006475,
+          "edits": 64909,
+          "path": "data/processed/cowsl2h/train.m2",
+          "sentences": 37473,
+          "sha256": "82a20a2cfa308eec18b8f24e25793c66e5aec85205e41ce05c7fff0d31176e92"
+        }
+      }
+    },
     "falko_merlin": {
       "frozen_at": "2026-09-09T01:05:04+00:00",
       "source_url": "https://github.com/adrianeboyd/boyd-wnut2018/releases/download/wnut2018/data.tar.gz",
@@ -50,6 +90,19 @@
           "path": "data/processed/overcorrection/de.m2",
           "sentences": 400,
           "sha256": "d06a10a8f60a880dae6dc6a776c73f997529ae512105ca84b39936066d206c3a"
+        }
+      }
+    },
+    "overcorrection_es": {
+      "frozen_at": "2026-09-17T11:56:46+00:00",
+      "source_url": "Leipzig Corpora Collection; see configs/phase1_es.yaml",
+      "splits": {
+        "all": {
+          "bytes": 63537,
+          "edits": 0,
+          "path": "data/processed/overcorrection_es/es.m2",
+          "sentences": 400,
+          "sha256": "1835fe961c1688f5847fe8007361b589316bfa00addd05a749bd3a891bc8a986"
         }
       }
     }

@@ -76,36 +76,68 @@ REGISTRY: dict[str, Corruptor] = {}
 NEEDS_PARSE: set[str] = set()
 
 
-def _register(name: str, function: Corruptor, needs_parse: bool) -> Corruptor:
-    if name in REGISTRY:
+def _register(
+    name: str,
+    function: Corruptor,
+    needs_parse: bool,
+    registry: dict[str, Corruptor],
+    needs_parse_set: set[str],
+) -> Corruptor:
+    if name in registry:
         raise ValueError(f"Two corruptors are registered as {name!r}.")
-    REGISTRY[name] = function
+    registry[name] = function
     if needs_parse:
-        NEEDS_PARSE.add(name)
+        needs_parse_set.add(name)
     return function
 
 
-def corruptor(name: str) -> Callable[..., Corruptor]:
+def corruptor(
+    name: str,
+    registry: dict[str, Corruptor] = REGISTRY,
+    needs_parse_set: set[str] = NEEDS_PARSE,
+) -> Callable[..., Corruptor]:
     """Register a corruptor that works on tokens alone.
 
     German allows most of them to: articles and prepositions are closed classes
     that can be listed, and a capitalised non-initial token is reliably a noun.
     The parse is only needed for word order and morphology.
+
+    Args:
+        registry, needs_parse_set: Which language's tables to add this rule to.
+            Defaults to the module-level `REGISTRY`/`NEEDS_PARSE` -- German's,
+            since German was here first -- so every existing `@corruptor("x")`
+            call keeps registering exactly where it always has. A second
+            language passes its own dicts (see `corruptors/es.py`), because
+            `de.py` and `es.py` reuse rule names like `article_form` for rules
+            that mean different things in each language, and one shared
+            namespace would raise on the collision at import time.
     """
 
     def register(function):
-        return _register(name, lambda tokens, doc=None: function(tokens), needs_parse=False)
+        return _register(
+            name,
+            lambda tokens, doc=None: function(tokens),
+            needs_parse=False,
+            registry=registry,
+            needs_parse_set=needs_parse_set,
+        )
 
     return register
 
 
-def parse_corruptor(name: str) -> Callable[..., Corruptor]:
+def parse_corruptor(
+    name: str,
+    registry: dict[str, Corruptor] = REGISTRY,
+    needs_parse_set: set[str] = NEEDS_PARSE,
+) -> Callable[..., Corruptor]:
     """Register a corruptor that needs a parsed sentence.
 
     The wrapped function is handed the spacy doc and is skipped entirely when
     there is not one, rather than falling back to a guess. A word-order rule
     that guesses at where the finite verb is produces damage that is not the
     error it claims to be, and the explanation attached to it would be a lie.
+
+    See `corruptor` for what `registry`/`needs_parse_set` are for.
     """
 
     def register(function):
@@ -113,6 +145,8 @@ def parse_corruptor(name: str) -> Callable[..., Corruptor]:
             name,
             lambda tokens, doc=None: function(tokens, doc) if doc is not None else [],
             needs_parse=True,
+            registry=registry,
+            needs_parse_set=needs_parse_set,
         )
 
     return register
@@ -122,12 +156,17 @@ def propose(
     tokens: Sequence[str],
     rules: Sequence[str] | None = None,
     doc: object | None = None,
+    registry: dict[str, Corruptor] = REGISTRY,
 ) -> list[Corruption]:
-    """Every corruption the given rules can find in a sentence."""
-    names = rules if rules is not None else list(REGISTRY)
+    """Every corruption the given rules can find in a sentence.
+
+    `registry` defaults to German's, like `corruptor`/`parse_corruptor` do; a
+    caller working in Spanish passes `langlm.corruptors.es.REGISTRY`.
+    """
+    names = rules if rules is not None else list(registry)
     found: list[Corruption] = []
     for name in names:
-        found.extend(REGISTRY[name](tokens, doc))
+        found.extend(registry[name](tokens, doc))
     return found
 
 

@@ -19,7 +19,8 @@ from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
-from langlm.corruptors import apply, choose, propose
+from langlm.corruptors import REGISTRY, apply, choose, propose
+from langlm.corruptors.base import Corruptor
 from langlm.data.m2 import NONE, NOOP_TYPE, Edit, M2Sentence
 
 
@@ -55,9 +56,14 @@ def corrupt(
     errors: tuple[int, int] = (1, 2),
     doc: object | None = None,
     emitted: Counter | None = None,
+    registry: dict[str, Corruptor] = REGISTRY,
 ) -> M2Sentence | None:
-    """Damage one sentence, or return None if no rule can find purchase on it."""
-    available = propose(tokens, doc=doc)
+    """Damage one sentence, or return None if no rule can find purchase on it.
+
+    `registry` defaults to German's rules, like `corruptors.propose` itself
+    does; a Spanish caller passes `langlm.corruptors.es.REGISTRY`.
+    """
+    available = propose(tokens, doc=doc, registry=registry)
     if not available:
         return None
     wanted = rng.randint(*errors)
@@ -75,6 +81,7 @@ def generate(
     errors: tuple[int, int] = (1, 2),
     stats: InjectionStats | None = None,
     docs: Sequence[object] | None = None,
+    registry: dict[str, Corruptor] = REGISTRY,
 ) -> Iterator[M2Sentence]:
     """Yield one training example per clean sentence.
 
@@ -83,13 +90,16 @@ def generate(
         weights: Error-type weights, from the phase 2 config.
         seed: Seed for every random choice, so the corpus is reproducible.
         negative_share: Fraction left uncorrupted. The default is the measured
-            Falko-MERLIN rate rather than a round number.
+            Falko-MERLIN rate rather than a round number; a Spanish caller
+            passes the measured `cowsl2h` rate instead.
         errors: Inclusive range of errors to inject into a damaged sentence.
         stats: Filled in as a side effect, if given.
         docs: Parses, one per sentence, in the same order. Without them the
             word-order and separable-prefix rules produce nothing, and the
             corpus quietly loses the two types the Phase 1 baseline was worst
             at -- so callers that can afford a parse should pass one.
+        registry: Which language's corruptors to draw from. Defaults to
+            German's, like `corrupt` and `corruptors.propose` do.
     """
     rng = random.Random(seed)
     stats = stats if stats is not None else InjectionStats()
@@ -108,6 +118,7 @@ def generate(
             errors,
             doc=docs[index] if docs is not None else None,
             emitted=emitted,
+            registry=registry,
         )
         if damaged is None:
             # Nothing to break: keep it, as a negative rather than dropping it.

@@ -12,8 +12,15 @@ from typing import Any
 from langlm.config import PROCESSED_DIR
 from langlm.train.format import IGNORE, Encoded, encode
 
-#: Where `scripts/build_training_set.py` puts its output.
+#: Where `scripts/build_training_set.py` puts its output. Kept as the default
+#: for backward compatibility -- every existing caller assumes German.
 TRAINING_FILE = PROCESSED_DIR / "training" / "de.jsonl"
+
+
+def training_file(language: str) -> Path:
+    """Where `scripts/build_training_set.py` (or its `_es` counterpart) puts
+    one language's training file."""
+    return PROCESSED_DIR / "training" / f"{language}.jsonl"
 
 
 def read_records(path: Path = TRAINING_FILE) -> Iterator[dict[str, Any]]:
@@ -46,28 +53,43 @@ class SplitSizes:
 
 def build(
     tokenizer,
-    path: Path = TRAINING_FILE,
+    path: Path | None = None,
     max_length: int = 1024,
     validation: int = 500,
     seed: int = 20260909,
     limit: int | None = None,
     changes_weight: float = 1.0,
+    language: str = "de",
 ) -> tuple[list[Encoded], list[Encoded], SplitSizes]:
     """Encode the file and hold out a validation slice.
 
     The validation slice comes from the same generated corpus, so it measures
     whether the model learned the task rather than whether it generalises to
-    real learner German. That second question is what Falko-MERLIN dev is for,
-    and it stays the thing the model is actually judged on.
+    real learner text. That second question is what the frozen eval split is
+    for (Falko-MERLIN dev for German, COWS-L2H dev for Spanish), and it stays
+    the thing the model is actually judged on.
+
+    Args:
+        path: Defaults to `training_file(language)` -- `TRAINING_FILE` (German)
+            when `language` is also left at its default, so this is unchanged
+            for every existing caller.
+        language: Which prompt instruction `train.format.build_prompt` uses.
+            One training file is one language; this is not per-record.
     """
-    records = list(read_records(path))
+    records = list(read_records(path if path is not None else training_file(language)))
     if limit:
         records = records[:limit]
     random.Random(seed).shuffle(records)
 
     encoded, dropped = [], 0
     for record in records:
-        item = encode(record, tokenizer, max_length=max_length, changes_weight=changes_weight)
+        item = encode(
+            record,
+            tokenizer,
+            max_length=max_length,
+            changes_weight=changes_weight,
+            language=language,
+        )
         if item is None:
             dropped += 1
             continue

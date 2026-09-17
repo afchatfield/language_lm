@@ -1,0 +1,53 @@
+# Phase 1 configuration, Spanish: the evaluation harness and the baselines.
+#
+# The Spanish counterpart of `configs/phase1.yaml`. Same structure, same
+# question -- what is measured, on what, and against what -- with COWS-L2H in
+# place of Falko-MERLIN and `es`/`es-ES` in place of `de`/`de-DE` wherever a
+# language code is asked for.
+
+# --- evaluation data ---------------------------------------------------------
+evaluation:
+  # COWS-L2H split used for every development decision, the same discipline
+  # `phase1.yaml` sets for Falko-MERLIN dev: `test` stays frozen until Phase 5
+  # reads it for the one final number, and `load_split` refuses to hand it
+  # over without an explicit opt-in.
+  split: dev
+  beta: 0.5
+
+# --- overcorrection set ------------------------------------------------------
+# A few hundred sentences of published Spanish prose that need no correction.
+# Deliberately NOT screened with LanguageTool, for the same reason German's
+# is not: doing so would hand LanguageTool a zero by construction. See
+# `langlm.data.overcorrection_es`.
+overcorrection:
+  size: 400
+  seed: 20260909
+  corpora: [spa_news_2023_100K, spa_wikipedia_2021_100K]
+
+# --- baselines ---------------------------------------------------------------
+baselines:
+  languagetool:
+    # Generic "es", not a country variant -- matching the ngram archive this
+    # project already downloads (`ngrams-es-20150915.zip`, not `-ES`-suffixed),
+    # so the n-gram model and the language code agree on which Spanish this is.
+    language: es
+    disabled_rules:
+      - WHITESPACE_RULE
+      - COMMA_PARENTHESIS_WHITESPACE
+      - UNPAIRED_BRACKETS
+    require_replacement: true
+
+  model:
+    # Same base model as German's: Phase 0 chose EuroLLM-1.7B for its Spanish
+    # fertility too (reports/phase0/tokenizer_fertility.csv), so there is no
+    # separate Phase 0 decision to make here.
+    repo_id: utter-project/EuroLLM-1.7B
+    max_new_tokens: 96
+    temperature: 0.0
+    # Drawn from COWS-L2H train, never dev or test -- same rule as German's.
+    few_shot_examples: 8
+    few_shot_seed: 20260909
+    # English explanations, the same templates German's baseline reads: see
+    # `rules/es.yaml`'s own header for why this is not a separate authoring
+    # effort.
+    explanation_language: en

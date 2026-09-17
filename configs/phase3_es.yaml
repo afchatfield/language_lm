@@ -1,0 +1,58 @@
+# Phase 3 configuration: Spanish supervised fine-tuning.
+#
+# The Spanish counterpart of `configs/phase3.yaml`. Every hyperparameter below
+# is copied from it unchanged -- they are architecture and optimiser choices,
+# not language-specific ones, and EuroLLM-1.7B is multilingual by design, so
+# there is no reason to expect Spanish to want a different LoRA rank or
+# learning rate a priori. What differs is only what has to: the output
+# directory, and the training-file/prompt language `train_sft.py --language es`
+# selects. If a real training run finds these defaults wrong for Spanish, that
+# is itself a Phase 5 finding worth writing up, not something to guess at now.
+#
+# Runs the same way German does, with the language flag:
+#   python scripts/train_sft.py --language es --dry-run
+#   python scripts/train_sft.py --language es
+
+model:
+  repo_id: utter-project/EuroLLM-1.7B
+  dtype: bfloat16
+
+# --- LoRA --------------------------------------------------------------------
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.0
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+# --- optimisation ------------------------------------------------------------
+training:
+  epochs: 3
+  learning_rate: 1.0e-4
+  lr_scheduler: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  batch_size: 16
+  gradient_accumulation: 2
+  # Same cap as German's, for the same reason: dropping a long example teaches
+  # less damage than truncating one mid-answer. `build_training_set_es.py`'s
+  # own report says how many of the COWS-L2H-derived corpus it costs.
+  max_length: 1024
+  seed: 20260909
+  # Held out from the generated corpus, to watch for overfitting during the
+  # run. The number that matters is still COWS-L2H dev, real learner Spanish
+  # rather than this project's own corruptions -- the same division of labour
+  # `validation_size` and Falko-MERLIN dev have for German.
+  validation_size: 500
+  logging_steps: 25
+  eval_steps: 250
+  save_steps: 500
+  # German's own tuning found its evaluation loss bottoming out well before
+  # the final step and stayed flat after, which is why it keeps more than the
+  # last two checkpoints. Not yet measured for Spanish -- carried over as a
+  # reasonable default, not a repeated finding.
+  save_total_limit: 6
+
+output:
+  # Adapter weights, not a merged model, same reason German's stays separate:
+  # Phase 4 does surgery on the base checkpoint and re-applies the adapter.
+  adapter_dir: checkpoints/phase3-es

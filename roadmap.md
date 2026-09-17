@@ -364,16 +364,161 @@ the axis this decision turns on; overcorrection is.
 ## Phase 5 — Spanish port
 *~1 week — the test of whether the architecture is real*
 
-- [ ] `corruptors/es.py`: ser/estar, subjunctive triggers, gender/number agreement, accents and
-      tildes, por/para, preterite vs imperfect, leísmo/laísmo
-- [ ] `rules/es.yaml` from Spanish LT rule IDs
-- [ ] Eval data: COWS-L2H / CEDEL2
-- [ ] Run the full pipeline end to end — **nothing else in the repo should need changing**
+**Corpus downloaded and sentence-aligned** (`scripts/download_cowsl2h.py`, pinned to
+commit `6b18b773`, spacy `es_core_news_sm` — not the regex splitter the initial survey
+used, so these numbers are the real ones):
+
+| | German (Falko-MERLIN) | Spanish (COWS-L2H) |
+|---|---:|---:|
+| aligned sentence pairs | ~24,000 | **46,473** (train 37,473 / dev 4,716 / test 4,284) |
+| carrying real edits | — | 31,151 (67.0%) |
+| already correct, the noop signal | — | 15,322 |
+| learners | — | 883 (716 / 85 / 82) |
+
+5,382 essays, 2,881 with a `corrected1` (53.5%). Split by learner id, salted-hash
+bucketed 80/10/10 — essay-level splitting would leak a student's style across train
+and test, since the corpus is longitudinal. Of the 2,881 corrected essays, 634 (22.0%)
+were dropped: their essay and correction split into different numbers of sentences,
+most often a corrector merging or splitting a run-on, and there is no honest automatic
+fix for that — force-aligning would score against a guess.
+
+**Now typed and frozen.** `errant_es` turned the aligned pairs into M2
+(`scripts/build_cowsl2h_m2.py`), and `scripts/freeze_splits_es.py` recorded their
+SHA-256 in the manifest already committed for German: 37,473 / 4,716 / 4,284 sentences,
+64,909 / 7,563 / 7,333 edits. The build order above reads 1-2-3 but the real dependency
+runs 1-3-2: freezing needs M2, and M2 needs a typing annotator, so `errant_es` had to
+exist before the freeze could — noting the resequencing rather than quietly doing it.
+
+> **The upstream corrections carry their own noise**, independent of anything this
+> pipeline does: `corrected1` on one `vacation.S17` essay reads "...el año pasadosolo
+> yo..." — a corrector's edit fused two words with no space between them, verified in
+> the raw CSV before writing any code to explain it away. Nothing here auto-repairs it;
+> a wrong fix would be worse than a visible one. `errant_es` needs a Spanish Hunspell
+> dictionary for the same reason `errant_de/spelling.py` needs `de_DE_frami` — telling a
+> misspelling from a wrong word choice — and that same dictionary is what will catch
+> artifacts like this one instead of typing them as a real edit.
+
+- [x] `corruptors/es.py`: 13 rules — `drop_accent`, `keyboard`, `drop_inverted_punctuation`,
+      `article_form`, `drop_article`, `adjective_form`, `preposition` (por/para headline),
+      `drop_preposition`, `redundant_subject_pronoun`, `drop_object_clitic`, `ser_estar`,
+      `subjunctive_for_indicative`, `verb_infinitive`. Every rule's claimed type verified
+      against real `errant_es` output, not assumed — two guesses were wrong on the first
+      pass (`ser_estar`/`subjunctive_for_indicative` claimed `R:VERB(:FORM)`, `errant_es`
+      calls the copula `AUX` and gives `R:AUX(:FORM)`) and caught immediately by testing
+      rather than shipping. A stress test over 800 real, already-correct COWS-L2H
+      sentences then found and fixed five more defects — `article_form`/`drop_article`
+      swapping an object clitic pronoun ("la" is homographic with the article), `keyboard`
+      occasionally landing on a real word by coincidence, `adjective_form` inflecting a
+      gender-invariant adjective (`indígena` has no `indígeno`), and `ser_estar` firing on
+      identity statements where Spanish grammar forbids `estar` outright. `tests/test_corruptors_es.py`
+      (32 cases) regression-tests every one of the five.
+  - **Two roadmap-named phenomena are declined, honestly, not silently dropped.**
+    Preterite vs imperfect: `es_core_news_sm` tags irregular preterites unreliably enough
+    to be unsafe (`estuvimos` → `Tense=Pres`, `hube` → lemma `hubir`, `estuviste` not
+    tagged as a verb at all) — a rule built on those tags would mistype its own training
+    data the way the German file's own inspection warned against. Leísmo/laísmo: it is
+    standard usage across large parts of the Spanish-speaking world, and COWS-L2H's own
+    annotators evidently agree — `R:PRON:FORM` is 1.17% of edits, not the mass a
+    systematically "corrected" dialect feature would produce — so a rule here would be
+    teaching the model to fight a dialect, not an error.
+  - **Two shipped rules carry a measured, non-zero mistype rate**, found and quantified by
+    the same stress test rather than hidden: `verb_infinitive` (22.3% of 121 fires) and
+    `adjective_form` (33.3% of 48 fires) sometimes have `es_core_news_sm` re-lemmatise the
+    damaged form to a different lemma than the original, so `errant_es` calls the edit
+    `R:OTHER`/`R:MORPH`/`R:VERB` rather than the `:FORM` type the rule claims. The
+    **correction itself is never wrong** in either case — only the type label the
+    `changes` list and the per-type histogram see. `adjective_form` is the rule most
+    worth revisiting if the project ever moves past the small spacy model.
+  - **Found and fixed a real, separate bug on the way**: `explanations.explain_correction`
+    hard-coded `errant_de` regardless of its own `language` parameter, so
+    `explain_correction(..., language="es")` silently annotated Spanish text with the
+    German annotator and German dictionary. Not something this session introduced — a
+    latent gap with only one language to expose it — but it would have made every Spanish
+    explanation wrong. Fixed with a small `_annotator(language)` dispatch; German's path
+    reverified unchanged.
+  - **`corruptor()`/`parse_corruptor()`/`propose()` in `corruptors/base.py` gained an
+    optional `registry`/`needs_parse_set` parameter**, defaulting to German's own tables
+    so every existing call site is unchanged. Needed because `de.py` and `es.py` reuse
+    seven rule names (`article_form`, `drop_article`, `preposition`, `drop_preposition`,
+    `adjective_form`, `keyboard`, `verb_infinitive`) for rules that do different things in
+    each language — the previous single global registry would have raised at import time
+    on the first shared name.
+- [x] `rules/es.yaml` + `rules/es_types.yaml` — explanation templates for every corruptor
+      and every real-data ERRANT type down to ~1% of edits, calibrated against the actual
+      Spanish histogram rather than copied from German's. Two entries read differently on
+      purpose: `U:PRON` is German's *smallest* hand-written entry (1.36%, repetition) and
+      Spanish's *largest* correctable one (8.15%, the pro-drop pattern with no German
+      analogue); `R:ORTH` is stress marks here, not capitalisation. No `languagetool:`
+      refinement section and no citation apparatus yet — an LT Spanish rule-id survey and
+      whatever the RAE equivalent of a checkable numbered ruleset would be are real,
+      separate work, left undone rather than faked with an unverified citation.
+- [x] `errant_es` — **the item Phase 5 was missing.** No public Spanish ERRANT existed
+      to install, so `errant_de` was split into `errant_core` (alignment plumbing +
+      merger, moved unchanged — verified against `tests/test_errant_de.py`, still 14/14)
+      and a per-language profile (classifier + spelling). `errant_es.classifier` swaps in
+      one thing: German's default "same word, cosmetically different" is case-insensitive
+      equality; Spanish's is stress-mark-insensitive equality (`esta`/`está`), and it is
+      deliberately *not* Unicode decomposition, which would strip the tilde off `ñ` and
+      call `año`/`ano` the same word. `errant_es.spelling` uses the LibreOffice `es_ES`
+      Hunspell dictionary, same as `de_DE_frami` for German. Verified against real
+      COWS-L2H sentences and a 14-case test suite (`tests/test_errant_es.py`), covering
+      the case ERRANT's decomposition would get wrong.
+- [x] ~~Eval data: COWS-L2H / CEDEL2~~ → **COWS-L2H only.** CEDEL2 is free, large and
+      current (6,559 participants, 1.5M words, v3 October 2025) but ships FreeLing POS
+      tags and **no corrected parallel text**, so it can neither train nor score GEC.
+      It was on this list in error.
+- [x] Sentence-align essay to correction — a step German never needed, because
+      Falko-MERLIN arrived as sentence-level M2 with noop markers and COWS-L2H is
+      document-level CSV. `src/langlm/data/cowsl2h.py`, spacy-based, 46,473 pairs.
+- [x] Freeze `es` train/dev/test splits by learner, not by essay: the corpus is
+      longitudinal and the same student writes on several prompts. `scripts/freeze_splits_es.py`,
+      manifest verified. Error-type histogram in `reports/phase5/error_type_histogram_es.md`
+      (51 types, 72,472 train+dev edits) — the Spanish counterpart of the table Phase 2
+      used to weight German synthetic error injection, now ready for `corruptors/es.py`.
+- [x] Run the full data + training pipeline end to end, up to the point training can
+      start — **and the claim did not hold.** Two things needed real code changes, not just
+      new files: `train/format.py`'s prompt instruction was hardcoded `"Correct the German
+      sentence"` (would have trained Spanish under a lying prompt), and `train/data.py`'s
+      training-file path was hardcoded to `de.jsonl`. Both fixed additively — `language`
+      parameters defaulting to `"de"`, every existing German call site unchanged, full suite
+      still green. `train_sft.py --language es` now exists and its dry-run was actually run:
+      correct prompt, sane loss mask, real forward pass.
+  - Built for real, not stubbed: `quality.py` parameterized by language (Spanish `ALLOWED`
+    regex read off a real character survey of `spa_news_2023_100K`, not guessed);
+    `clean_es.py` (60,000-sentence clean corpus, `spa_news_2023_100K` + `spa_wikipedia_2021_100K`,
+    the second downloaded this session); `overcorrection_es.py` + 400 frozen sentences;
+    `learner_es.py` (COWS-L2H → training records); `injection.py` gained a `registry`
+    parameter so it can draw from `corruptors.es` instead of German's; `configs/phase2_es.yaml`,
+    `phase3_es.yaml`, `phase1_es.yaml`. `build_training_set_es.py` produced **97,473 examples**
+    (37,473 real COWS-L2H + 60,000 synthetic, 51 error types, 0 broken, 0 unexplained) —
+    verified by reading the 100-sample exit-criterion output, which caught one real defect
+    (`M:PUNCT`'s explanation overclaimed "likely ¿ or ¡" when the real edit was a comma) and
+    fixed it before the numbers above.
+  - **One scoping call, made explicitly**: no back-translation. German's own iteration 5
+    measured negative against its first successful run's bar; there is no equivalent bar for
+    Spanish yet to measure against, so building the generator now would be speculative. The
+    negative-example rate is COWS-L2H's own measured 33.0%, not Falko-MERLIN's 22% carried
+    over.
+  - **Not done**: `run_baselines.py` is still entirely German-hardcoded (`errant_de`,
+    `falko_merlin`, the German overcorrection module) — a comparable-sized task to everything
+    above, not started. Training does not depend on it; knowing what F0.5 bar to hold the
+    trained model to does.
 - [ ] Cross-lingual pruning experiment: evaluate German-pruned model on Spanish and vice versa
       → how much does language-specific pruning cost cross-lingually?
 
 **Exit criterion:** if adding Spanish took more than a week, the abstraction was wrong.
 Say so honestly in the README rather than hiding it.
+
+> **The abstraction is already one item short and it is worth saying so now.** `errant_es`
+> is not a corruptor file; it is 500 lines of linguistics, and Phase 5 listed it nowhere.
+> What survives the audit is that **F0.5 never reads our error types** — `m2_scorer.py`
+> does not mention them — so a second annotator changes the per-type breakdown and the
+> explanations, and leaves 0.7072 and the whole Phase 4 table standing.
+>
+> **The baseline is weaker in Spanish.** LanguageTool's `es` grammar rules are 2.1 MB
+> against German's 4.9 MB, and its style rules 49 KB against 471 KB — roughly 42% of the
+> rule mass. Beating LanguageTool will mean less here than it did in German. Phase 1
+> already found the honest bar is the few-shot base model; hold Spanish to that.
 
 ---
 
