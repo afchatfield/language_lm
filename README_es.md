@@ -138,13 +138,26 @@ to set a bar for a generator to fail to clear, so this port stops at the data
 state German was in when it first passed the exit criterion (real data
 primary, synthetic supporting), not at every later German iteration.
 
+## Baselines
+
+`run_baselines.py --language es` now exists (`configs/phase1_es.yaml`;
+LanguageTool set to generic `es`, matching the downloaded `ngrams-es`
+archive). Identity and LanguageTool are measured:
+
+| System | P | R | F0.5 | Overcorrection |
+|---|---:|---:|---:|---:|
+| identity | 0.0000 | 0.0000 | 0.0000 | 0.0% |
+| LanguageTool (`es`) | 0.4232 | 0.1588 | **0.3175** | 27.3% |
+
+Weaker than German's LanguageTool baseline (F0.5 0.4134), which the Spanish
+grammar rule file's size predicted before any of this ran — but LanguageTool
+was never the bar that mattered for German either; Phase 1 found the prompted
+base model beat it. Zero-shot and few-shot EuroLLM are what decide that for
+Spanish, and are either running or complete by the time this is read: see
+`reports/phase5/baselines_es.md` for the current numbers.
+
 ## What is genuinely not done yet
 
-- **No baselines.** `run_baselines.py` is still entirely German-hardcoded
-  (`errant_de`, Falko-MERLIN, the German overcorrection set). Training does
-  not depend on it; knowing what F0.5 number counts as good does.
-  `configs/phase1_es.yaml` exists (LanguageTool language `es`, matching the
-  already-downloaded `ngrams-es` archive) but nothing runs it yet.
 - **No trained model, no F0.5, no per-type breakdown.** `train_sft.py
   --language es` is verified ready; it has not been run to completion.
 - **No Makefile targets.** Every script above is run directly with `python`;

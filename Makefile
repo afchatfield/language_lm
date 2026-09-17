@@ -12,7 +12,10 @@
         check-corruptors check-citations corrupter backtranslation \
         setup-cuda train-data dry-run train evaluate phase3 \
         preference-pairs train-dpo evaluate-test trim-vocab \
-        clean-ngrams clean-data
+        clean-ngrams clean-data \
+        ngrams-es corpora-es data-es dictionary-es overcorrection-es \
+        baselines-es clean-corpus-es training-set-es train-data-es \
+        dry-run-es train-es phase5
 
 PYTHON ?= python
 COMPOSE = docker compose -f docker/docker-compose.yml
@@ -169,6 +172,58 @@ evaluate-test:  ## Unseal the held-out split. Once per model, at the very end.
 
 trim-vocab:  ## Trim the base model's vocabulary to the rows German and English use
 	$(PYTHON) scripts/trim_vocab.py --threshold 0.999
+
+# --- Phase 5: Spanish port ---------------------------------------------------
+#
+# Mirrors Phase 0/1/2/3's targets above, `-es` suffixed. No `evaluate-es` or
+# `phase5` chain to a trained model yet: `eval_finetuned.py` is not
+# language-parameterised, and there is no adapter to evaluate until a training
+# run finishes.
+
+ngrams-es:  ## Download + extract the Spanish n-gram data (~1.7GB download, ~6GB on disk)
+	$(PYTHON) scripts/download_ngrams.py --lang es
+
+corpora-es:  ## Download the Leipzig corpora the Spanish clean corpus is built from
+	$(PYTHON) scripts/download_leipzig.py --corpus spa_news_2023_100K spa_wikipedia_2021_100K
+
+data-es:  ## Download COWS-L2H, type it with errant_es, and freeze the splits
+	$(PYTHON) scripts/download_cowsl2h.py
+	$(PYTHON) scripts/build_cowsl2h_m2.py
+	$(PYTHON) scripts/freeze_splits_es.py
+
+dictionary-es:  ## Fetch the Spanish Hunspell dictionary used for error typing
+	$(PYTHON) -c "from langlm.eval.errant_es.spelling import ensure_dictionary; ensure_dictionary()"
+
+overcorrection-es:  ## Build and freeze the set of already-correct Spanish sentences
+	$(PYTHON) scripts/build_overcorrection_set_es.py
+
+baselines-es:  ## Run every Spanish baseline and write the results table (needs lt-up with ngrams-es)
+	$(PYTHON) scripts/run_baselines.py --language es
+
+phase1-es: dictionary-es overcorrection-es baselines-es  ## The Spanish counterpart of `phase1`
+	@echo "Phase 5 baseline artefacts are in reports/phase5/"
+
+clean-corpus-es:  ## Filter and freeze the clean Spanish text the corruptors damage
+	$(PYTHON) scripts/build_clean_corpus_es.py
+
+training-set-es:  ## Corrupt, explain, and write the Spanish training set
+	$(PYTHON) scripts/build_training_set_es.py
+
+train-data-es:  ## Everything the trainer needs for Spanish, from a fresh clone
+	$(PYTHON) scripts/download_cowsl2h.py
+	$(PYTHON) scripts/build_cowsl2h_m2.py
+	$(PYTHON) scripts/freeze_splits_es.py
+	$(PYTHON) scripts/download_leipzig.py --corpus spa_news_2023_100K spa_wikipedia_2021_100K
+	$(PYTHON) -c "from langlm.eval.errant_es.spelling import ensure_dictionary; ensure_dictionary()"
+	$(PYTHON) scripts/build_overcorrection_set_es.py
+	$(PYTHON) scripts/build_clean_corpus_es.py
+	$(PYTHON) scripts/build_training_set_es.py
+
+dry-run-es:  ## Check the Spanish loss mask, the schema and one forward pass. Trains nothing.
+	$(PYTHON) scripts/train_sft.py --language es --limit 64 --dry-run
+
+train-es:  ## LoRA fine-tune on the Spanish training set
+	$(PYTHON) scripts/train_sft.py --language es
 
 # --- cleanup ----------------------------------------------------------------
 

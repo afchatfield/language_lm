@@ -67,6 +67,7 @@ def measure(
     sources: Sequence[str],
     hypotheses: Sequence[str],
     keep_examples: int = 25,
+    language: str = "de",
 ) -> OvercorrectionResult:
     """Count the sentences a system changed, and what it thought it was fixing.
 
@@ -76,6 +77,8 @@ def measure(
         keep_examples: How many altered sentences to keep for the report. The
             examples matter as much as the rate: they say whether the system is
             fighting the tokenisation or genuinely rewriting good German.
+        language: Which ERRANT annotator types the spurious edits -- `"de"` or
+            `"es"`. Defaults to German, so every existing caller is unchanged.
 
     Raises:
         ValueError: if the two sequences are of different lengths.
@@ -85,7 +88,12 @@ def measure(
 
     # Imported here: annotating is what makes this expensive, and a caller that
     # only wants the rate should not pay for spacy at import time.
-    from langlm.eval.errant_de import annotate
+    if language == "de":
+        from langlm.eval.errant_de import annotate
+    elif language == "es":
+        from langlm.eval.errant_es import annotate
+    else:
+        raise ValueError(f"No ERRANT annotator for language {language!r}.")
 
     modified = 0
     edits = 0

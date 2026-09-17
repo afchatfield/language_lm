@@ -1,0 +1,20 @@
+{
+  "written_at": "2026-09-17T17:26:16+00:00",
+  "split": "dev",
+  "sentences": 4716,
+  "overcorrection_sentences": 400,
+  "baselines": {
+    "identity": {
+      "f0.5": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "overcorrection_rate": 0.0
+    },
+    "languagetool": {
+      "f0.5": 0.3175,
+      "precision": 0.4232,
+      "recall": 0.1588,
+      "overcorrection_rate": 0.2725
+    }
+  }
+}

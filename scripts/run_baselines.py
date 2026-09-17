@@ -1,26 +1,28 @@
 #!/usr/bin/env python
-"""Run the Phase 1 baselines and write the results table.
+"""Run the Phase 1 (or Phase 5) baselines and write the results table.
 
 Three systems, plus the identity system that prices the harness itself:
 
     identity        changes nothing; measures what re-tokenisation costs
     languagetool    a mature rule-based checker, applying its own suggestions
-    zero-shot       EuroLLM-1.7B prompted to correct German
+    zero-shot       EuroLLM-1.7B prompted to correct the target language
     few-shot        the same model, with worked examples from the train split
 
 Each system is run over the development split and over the overcorrection set,
-and its output is written to `data/interim/phase1/` before anything is scored.
-Generating is slow and scoring is fast, so they are separate: rerunning the
-script rebuilds the report from whatever outputs already exist and only
+and its output is written to `data/interim/phase1{,_es}/` before anything is
+scored. Generating is slow and scoring is fast, so they are separate: rerunning
+the script rebuilds the report from whatever outputs already exist and only
 generates the ones that are missing.
 
-    python scripts/run_baselines.py                    # everything
+    python scripts/run_baselines.py                    # everything, German
+    python scripts/run_baselines.py --language es       # Spanish
     python scripts/run_baselines.py --only languagetool
     python scripts/run_baselines.py --report-only
     python scripts/run_baselines.py --limit 100        # smoke test
     python scripts/run_baselines.py --only few-shot --batch-size 16
 
-The test split is not touched. It stays frozen until Phase 3.
+The test split is not touched. It stays frozen until Phase 3 (or Phase 5's
+final measurement).
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import argparse
 import gc
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,20 +39,84 @@ from langlm.baselines.identity import IdentityBaseline
 from langlm.baselines.languagetool import LanguageToolBaseline
 from langlm.baselines.prompted import PromptedBaseline, sample_shots
 from langlm.config import INTERIM_DIR, REPORTS_DIR, load_config
-from langlm.data import overcorrection as overcorrection_data
 from langlm.data.m2 import M2Sentence
 from langlm.data.splits import load_split
-from langlm.eval import errant_de, overcorrection, span_scorer
 from langlm.eval import m2_scorer as m2
-
-#: Where generated corrections are kept between runs.
-HYPOTHESIS_DIR = INTERIM_DIR / "phase1"
-
-#: Where the report goes.
-REPORT_DIR = REPORTS_DIR / "phase1"
+from langlm.eval import overcorrection, span_scorer
 
 #: The order the table reads in: cheapest and least interesting first.
 BASELINE_ORDER = ("identity", "languagetool", "zero-shot", "few-shot")
+
+
+@dataclass(frozen=True)
+class LanguageSettings:
+    """Everything that differs between a German and a Spanish baseline run.
+
+    Centralised here rather than scattered as `if language == "de"` checks
+    through every function below -- the same "one dispatch point" shape
+    `explanations._annotator` and `langlm.data.quality` use elsewhere in this
+    project, for the same reason: it is the one place a third language would
+    need to add an entry.
+    """
+
+    config_name: str
+    #: Split-manifest corpus key for the real learner corpus.
+    corpus: str
+    #: `overcorrection` module for this language's already-correct set.
+    overcorrection_module: str
+    #: Passed through to `overcorrection.measure` and `errant(...)` below.
+    annotator: str
+    #: Measured share of already-correct sentences in the real training
+    #: corpus -- German's is Falko-MERLIN's 22%, Spanish's is COWS-L2H's
+    #: measured 33.0% (`load_split("cowsl2h", "train")`), not a value either
+    #: language should borrow from the other.
+    correct_share: float
+    #: For report prose ("published German prose", "published Spanish prose").
+    prose_name: str
+    report_dir: Path
+    hypothesis_dir: Path
+
+
+LANGUAGES = {
+    "de": LanguageSettings(
+        config_name="phase1",
+        corpus="falko_merlin",
+        overcorrection_module="langlm.data.overcorrection",
+        annotator="de",
+        correct_share=0.22,
+        prose_name="German",
+        report_dir=REPORTS_DIR / "phase1",
+        hypothesis_dir=INTERIM_DIR / "phase1",
+    ),
+    "es": LanguageSettings(
+        config_name="phase1_es",
+        corpus="cowsl2h",
+        overcorrection_module="langlm.data.overcorrection_es",
+        annotator="es",
+        correct_share=0.330,
+        prose_name="Spanish",
+        report_dir=REPORTS_DIR / "phase5",
+        hypothesis_dir=INTERIM_DIR / "phase1_es",
+    ),
+}
+
+
+def errant(lang: LanguageSettings):
+    """The ERRANT annotator module for this language, imported lazily.
+
+    `errant_de` and `errant_es` both expose `tokenize` and `annotate_corpus`
+    in the same shape (`langlm.eval.errant_core`), so this dispatch is the
+    only place that needs to know there is more than one.
+    """
+    import importlib
+
+    return importlib.import_module(f"langlm.eval.errant_{lang.annotator}")
+
+
+def overcorrection_module(lang: LanguageSettings):
+    import importlib
+
+    return importlib.import_module(lang.overcorrection_module)
 
 
 def main() -> None:
@@ -59,6 +126,12 @@ def main() -> None:
     parser.add_argument("--regenerate", action="store_true", help="Ignore cached outputs")
     parser.add_argument("--limit", type=int, help="Use only the first N sentences (smoke test)")
     parser.add_argument(
+        "--language",
+        default="de",
+        choices=sorted(LANGUAGES),
+        help="German kept as the default so every existing invocation is unchanged.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         help="Override the model batch size. Few-shot prompts are several hundred "
@@ -67,11 +140,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = load_config("phase1")
+    lang = LANGUAGES[args.language]
+    config = load_config(lang.config_name)
     split = config["evaluation"]["split"]
 
-    dev = load_split("falko_merlin", split)
-    clean = load_split(overcorrection_data.CORPUS, "all")
+    dev = load_split(lang.corpus, split)
+    clean = load_split(overcorrection_module(lang).CORPUS, "all")
     if args.limit:
         dev, clean = dev[: args.limit], clean[: args.limit]
 
@@ -80,31 +154,40 @@ def main() -> None:
     if not args.report_only:
         for name in args.only:
             generate(
-                name, dev, clean, config, regenerate=args.regenerate, batch_size=args.batch_size
+                name,
+                dev,
+                clean,
+                config,
+                lang,
+                regenerate=args.regenerate,
+                batch_size=args.batch_size,
             )
 
-    write_report(dev, clean, config)
+    write_report(dev, clean, config, lang)
 
 
 # --- generation -------------------------------------------------------------
 
 
-def build(name: str, config: dict, batch_size: int | None = None):
+def build(name: str, config: dict, lang: LanguageSettings, batch_size: int | None = None):
     """Construct a baseline by name."""
     if name == "identity":
         return IdentityBaseline()
     if name == "languagetool":
-        return LanguageToolBaseline.from_config()
+        return LanguageToolBaseline.from_config(config_name=lang.config_name)
     settings = config["baselines"]["model"]
     shots = []
     if name == "few-shot":
         shots = sample_shots(
-            load_split("falko_merlin", "train"),
+            load_split(lang.corpus, "train"),
             settings["few_shot_examples"],
             settings["few_shot_seed"],
+            correct_share=lang.correct_share,
         )
     overrides = {"batch_size": batch_size} if batch_size else {}
-    return PromptedBaseline.from_config(shots=shots, **overrides)
+    return PromptedBaseline.from_config(
+        shots=shots, config_name=lang.config_name, language=lang.annotator, **overrides
+    )
 
 
 def generate(
@@ -112,6 +195,7 @@ def generate(
     dev: Sequence[M2Sentence],
     clean: Sequence[M2Sentence],
     config: dict,
+    lang: LanguageSettings,
     regenerate: bool = False,
     batch_size: int | None = None,
 ) -> None:
@@ -120,13 +204,13 @@ def generate(
     missing = {
         key: sentences
         for key, sentences in targets.items()
-        if regenerate or not path_for(name, key, len(sentences)).exists()
+        if regenerate or not path_for(name, key, len(sentences), lang).exists()
     }
     if not missing:
         print(f"{name}: already generated")
         return
 
-    system = build(name, config, batch_size)
+    system = build(name, config, lang, batch_size)
     try:
         for key, sentences in missing.items():
             print(f"{name}: correcting {len(sentences)} sentences ({key})")
@@ -137,9 +221,9 @@ def generate(
                 else [system.correct(source) for source in sources]
             )
             # One tokeniser for every system, so that a model writing ordinary
-            # German is not charged for where it puts the full stop.
-            hypotheses = [errant_de.tokenize(text) for text in raw]
-            write_lines(path_for(name, key, len(sentences)), hypotheses)
+            # prose is not charged for where it puts the full stop.
+            hypotheses = [errant(lang).tokenize(text) for text in raw]
+            write_lines(path_for(name, key, len(sentences), lang), hypotheses)
     finally:
         release(system)
 
@@ -163,8 +247,8 @@ def release(system: object) -> None:
         torch.mps.empty_cache()
 
 
-def path_for(name: str, key: str, count: int) -> Path:
-    return HYPOTHESIS_DIR / f"{name}.{key}.{count}.txt"
+def path_for(name: str, key: str, count: int, lang: LanguageSettings) -> Path:
+    return lang.hypothesis_dir / f"{name}.{key}.{count}.txt"
 
 
 def write_lines(path: Path, lines: Sequence[str]) -> None:
@@ -185,19 +269,22 @@ def score_baseline(
     dev: Sequence[M2Sentence],
     clean: Sequence[M2Sentence],
     beta: float,
+    lang: LanguageSettings,
 ) -> dict | None:
     """Score one baseline, or return None if it has not been generated."""
-    dev_path = path_for(name, "dev", len(dev))
-    clean_path = path_for(name, "overcorrection", len(clean))
+    dev_path = path_for(name, "dev", len(dev), lang)
+    clean_path = path_for(name, "overcorrection", len(clean), lang)
     if not dev_path.exists() or not clean_path.exists():
         return None
 
     hypotheses = read_lines(dev_path)
     maxmatch = m2.score(dev, hypotheses, beta=beta)
-    annotated = errant_de.annotate_corpus([s.source for s in dev], hypotheses)
+    annotated = errant(lang).annotate_corpus([s.source for s in dev], hypotheses)
     correction = span_scorer.score(dev, annotated, beta=beta, mode="correction")
     detection = span_scorer.score(dev, annotated, beta=beta, mode="detection")
-    over = overcorrection.measure([s.source for s in clean], read_lines(clean_path))
+    over = overcorrection.measure(
+        [s.source for s in clean], read_lines(clean_path), language=lang.annotator
+    )
 
     return {
         "name": name,
@@ -208,17 +295,20 @@ def score_baseline(
     }
 
 
-def write_report(dev: Sequence[M2Sentence], clean: Sequence[M2Sentence], config: dict) -> None:
-    """Score every generated baseline and write `reports/phase1/baselines.md`."""
+def write_report(
+    dev: Sequence[M2Sentence], clean: Sequence[M2Sentence], config: dict, lang: LanguageSettings
+) -> None:
+    """Score every generated baseline and write the results table."""
     beta = config["evaluation"]["beta"]
-    results = [r for r in (score_baseline(n, dev, clean, beta) for n in BASELINE_ORDER) if r]
+    results = [r for r in (score_baseline(n, dev, clean, beta, lang) for n in BASELINE_ORDER) if r]
     if not results:
         print("Nothing generated yet; no report written.")
         return
 
-    lines = _report_lines(results, dev, clean, config)
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    output = REPORT_DIR / "baselines.md"
+    lines = _report_lines(results, dev, clean, config, lang)
+    lang.report_dir.mkdir(parents=True, exist_ok=True)
+    name = "baselines.md" if lang.annotator == "de" else "baselines_es.md"
+    output = lang.report_dir / name
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\nWrote {output}")
 
@@ -237,21 +327,26 @@ def write_report(dev: Sequence[M2Sentence], clean: Sequence[M2Sentence], config:
             for r in results
         },
     }
-    (REPORT_DIR / "baselines.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    meta_name = "baselines.json" if lang.annotator == "de" else "baselines_es.json"
+    (lang.report_dir / meta_name).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
 
-def _report_lines(results: list[dict], dev, clean, config: dict) -> list[str]:
+def _report_lines(
+    results: list[dict], dev, clean, config: dict, lang: LanguageSettings
+) -> list[str]:
     split = config["evaluation"]["split"]
     beta = config["evaluation"]["beta"]
     model = config["baselines"]["model"]["repo_id"]
     gold_edits = sum(len(s.edits_for()) for s in dev)
+    corpus_name = "Falko-MERLIN" if lang.annotator == "de" else "COWS-L2H"
 
     lines = [
-        "# Phase 1 baselines",
+        f"# Phase {'1' if lang.annotator == 'de' else '5'} baselines"
+        + ("" if lang.annotator == "de" else " (Spanish)"),
         "",
-        f"Falko-MERLIN **{split}**: {len(dev):,} sentences, {gold_edits:,} gold edits. "
-        f"Overcorrection set: {len(clean):,} sentences of published German prose that "
-        f"need no correction. The test split has not been read.",
+        f"{corpus_name} **{split}**: {len(dev):,} sentences, {gold_edits:,} gold edits. "
+        f"Overcorrection set: {len(clean):,} sentences of published {lang.prose_name} prose "
+        f"that need no correction. The test split has not been read.",
         "",
         "## The table",
         "",
@@ -321,9 +416,9 @@ def _report_lines(results: list[dict], dev, clean, config: dict) -> list[str]:
         "## Notes",
         "",
         f"* Model: `{model}`, greedy decoding.",
-        "* Every system's output goes through the same German tokeniser before scoring. "
-        "The identity row prices that step: whatever false positives it shows are the "
-        "harness disagreeing with the corpus about hyphens and apostrophes, not a system "
+        f"* Every system's output goes through the same {lang.prose_name} tokeniser before "
+        "scoring. The identity row prices that step: whatever false positives it shows are "
+        "the harness disagreeing with the corpus about hyphens and apostrophes, not a system "
         "making mistakes.",
         "* LanguageTool applies the first suggestion of every non-overlapping match that "
         "offers one. Matches with no suggestion are left alone.",

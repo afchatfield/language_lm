@@ -499,10 +499,28 @@ exist before the freeze could — noting the resequencing rather than quietly do
     Spanish yet to measure against, so building the generator now would be speculative. The
     negative-example rate is COWS-L2H's own measured 33.0%, not Falko-MERLIN's 22% carried
     over.
-  - **Not done**: `run_baselines.py` is still entirely German-hardcoded (`errant_de`,
-    `falko_merlin`, the German overcorrection module) — a comparable-sized task to everything
-    above, not started. Training does not depend on it; knowing what F0.5 bar to hold the
-    trained model to does.
+- [x] Spanish baselines. `run_baselines.py` generalized the same way the training pipeline was —
+      a `LanguageSettings` dispatch table (config, corpus, annotator, measured negative-example
+      share, report paths) rather than per-language forks, German's own path re-verified
+      unchanged. `overcorrection.measure` and `PromptedBaseline` gained the same `language`
+      parameter, defaulting to German. `configs/phase1_es.yaml` points LanguageTool at generic
+      `es` (matching the `ngrams-es` archive, not a country variant). The Spanish n-grams
+      (1.7GB) were downloaded and verified live against the running server — a real confusion
+      pair from LanguageTool's own Spanish rule data (`acido`/`ácido`) was caught, not assumed
+      from the archive existing on disk.
+
+  | System | P | R | F0.5 | Overcorrection |
+  |---|---:|---:|---:|---:|
+  | identity | 0.0000 | 0.0000 | 0.0000 | 0.0% |
+  | LanguageTool (`es`) | 0.4232 | 0.1588 | **0.3175** | 27.3% |
+
+  Confirms the prediction made from the rule-file size alone before any of this ran (`rules/es.yaml`
+  had no LT survey yet, but German's `grammar.xml` was already known to be 4.9 MB against
+  Spanish's 2.1 MB): the Spanish LanguageTool baseline is real but weaker than German's
+  (F0.5 0.3175 vs 0.4134), on a similar overcorrection rate (27.3% vs 28.7%). Zero-shot and
+  few-shot EuroLLM — the bar that actually matters, per Phase 1's own finding that the prompted
+  base model, not LanguageTool, is the honest target — were running at the time of this entry;
+  see `reports/phase5/baselines_es.md` for whichever numbers are current.
 - [ ] Cross-lingual pruning experiment: evaluate German-pruned model on Spanish and vice versa
       → how much does language-specific pruning cost cross-lingually?
 

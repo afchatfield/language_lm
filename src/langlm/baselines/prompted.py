@@ -24,14 +24,21 @@ from functools import cached_property
 from langlm.config import load_config
 from langlm.data.m2 import M2Sentence
 
-#: Written in English on purpose. The user of this tool is learning German, and
-#: Phase 2's explanations are English for the same reason; keeping the prompt in
-#: the same language as the explanations means the Phase 5 Spanish port changes
-#: the examples and not the instructions.
-INSTRUCTION = (
-    "Correct the German sentence. Fix grammar, spelling, punctuation and word order. "
-    "Change nothing else. If the sentence is already correct, repeat it unchanged."
-)
+#: Written in English on purpose, per language. The user of this tool is
+#: learning the target language, and Phase 2's explanations are English for
+#: the same reason; keeping the prompt in the same language as the
+#: explanations means the Phase 5 Spanish port changes the examples and the
+#: one word naming the language, not the rest of the instruction.
+INSTRUCTION = {
+    "de": (
+        "Correct the German sentence. Fix grammar, spelling, punctuation and word order. "
+        "Change nothing else. If the sentence is already correct, repeat it unchanged."
+    ),
+    "es": (
+        "Correct the Spanish sentence. Fix grammar, spelling, punctuation and word order. "
+        "Change nothing else. If the sentence is already correct, repeat it unchanged."
+    ),
+}
 
 #: The completion format. A base model continues a pattern; it does not take
 #: orders, so the pattern has to be unmistakable. Neither marker carries a
@@ -53,6 +60,10 @@ class PromptedBaseline:
     #: because the time goes on moving the weights, not on the arithmetic.
     batch_size: int = 32
     name: str = "prompted"
+    #: Which language's instruction `preamble` uses. Defaults to German, so
+    #: every existing caller (`config_name="phase1"`) is unchanged; a Spanish
+    #: caller passes `language="es"` alongside `config_name="phase1_es"`.
+    language: str = "de"
     _model: object | None = field(default=None, repr=False)
     _tokenizer: object | None = field(default=None, repr=False)
 
@@ -61,6 +72,7 @@ class PromptedBaseline:
         cls,
         shots: list[tuple[str, str]] | None = None,
         config_name: str = "phase1",
+        language: str = "de",
         **overrides,
     ) -> PromptedBaseline:
         settings = load_config(config_name)["baselines"]["model"]
@@ -69,6 +81,7 @@ class PromptedBaseline:
             shots=shots or [],
             max_new_tokens=settings["max_new_tokens"],
             name="few-shot" if shots else "zero-shot",
+            language=language,
             **overrides,
         )
 
@@ -77,7 +90,7 @@ class PromptedBaseline:
     @cached_property
     def preamble(self) -> str:
         """The instruction plus the worked examples, which never change."""
-        blocks = [INSTRUCTION]
+        blocks = [INSTRUCTION[self.language]]
         blocks += [
             f"{SOURCE_PREFIX} {source}\n{TARGET_PREFIX} {target}" for source, target in self.shots
         ]
