@@ -245,6 +245,12 @@ def release(system: object) -> None:
 
     if torch.backends.mps.is_available():
         torch.mps.empty_cache()
+    # The same argument for CUDA: on a shared card the freed blocks sit in
+    # torch's pool rather than going back to the machine, and the next
+    # baseline -- or a training run on the same GPU -- asks the driver, not
+    # the pool, for its own.
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def path_for(name: str, key: str, count: int, lang: LanguageSettings) -> Path:
