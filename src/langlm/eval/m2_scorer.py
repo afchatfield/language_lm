@@ -39,7 +39,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
 from langlm.data.m2 import Edit, M2Sentence
-from langlm.eval import leniency
+from langlm.eval import canonical, leniency
 
 #: A lattice vertex: (tokens of the source consumed, tokens of the hypothesis consumed).
 Vertex = tuple[int, int]
@@ -383,6 +383,12 @@ def score(
             f"{len(hypotheses)} hypotheses for {len(sentences)} sentences: "
             f"the scorer aligns them by position, so they must correspond one to one."
         )
+
+    # Both sides into one Unicode normal form before any string is compared:
+    # `í` and `i`+U+0301 are the same word, and only one of them is what a
+    # system that writes Spanish will produce. See `langlm.eval.canonical`.
+    sentences = canonical.nfc_sentences(sentences)
+    hypotheses = canonical.nfc_all(hypotheses)
 
     total = Counts()
     for sentence, hypothesis in zip(sentences, hypotheses, strict=True):

@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from langlm.data.m2 import M2Sentence
+from langlm.eval import canonical
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,12 @@ def measure(
     """
     if len(sources) != len(hypotheses):
         raise ValueError(f"{len(hypotheses)} hypotheses for {len(sources)} sentences")
+
+    # A system that rewrites a decomposed accent into its precomposed form has
+    # not changed the sentence, and must not be charged an overcorrection for
+    # it. See `langlm.eval.canonical`.
+    sources = canonical.nfc_all(sources)
+    hypotheses = canonical.nfc_all(hypotheses)
 
     # Imported here: annotating is what makes this expensive, and a caller that
     # only wants the rate should not pay for spacy at import time.
