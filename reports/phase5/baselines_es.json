@@ -1,5 +1,5 @@
 {
-  "written_at": "2026-09-17T17:26:16+00:00",
+  "written_at": "2026-09-17T23:31:26+00:00",
   "split": "dev",
   "sentences": 4716,
   "overcorrection_sentences": 400,
@@ -11,10 +11,22 @@
       "overcorrection_rate": 0.0
     },
     "languagetool": {
-      "f0.5": 0.3175,
-      "precision": 0.4232,
+      "f0.5": 0.3179,
+      "precision": 0.4241,
       "recall": 0.1588,
       "overcorrection_rate": 0.2725
+    },
+    "zero-shot": {
+      "f0.5": 0.1671,
+      "precision": 0.3872,
+      "recall": 0.051,
+      "overcorrection_rate": 0.1125
+    },
+    "few-shot": {
+      "f0.5": 0.3077,
+      "precision": 0.5664,
+      "recall": 0.1088,
+      "overcorrection_rate": 0.08
     }
   }
 }

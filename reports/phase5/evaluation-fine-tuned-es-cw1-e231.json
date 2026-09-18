@@ -1,0 +1,20 @@
+{
+  "system": "fine-tuned-es-cw1-e231",
+  "split": "dev",
+  "f0.5": 0.5887,
+  "precision": 0.6331,
+  "recall": 0.4597,
+  "overcorrection_rate": 0.0575,
+  "detection_f": 0.6317,
+  "correction_f": 0.5339,
+  "lenient_f0.5": null,
+  "lenient_correction_f": null,
+  "baseline_bar": 0.5987,
+  "explanation": {
+    "coverage": 0.9462,
+    "precision": 0.9819,
+    "type_accuracy": 0.8316,
+    "rewrites": 5912,
+    "claims": 5927
+  }
+}
