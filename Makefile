@@ -15,7 +15,7 @@
         clean-ngrams clean-data \
         ngrams-es corpora-es data-es dictionary-es overcorrection-es \
         baselines-es clean-corpus-es training-set-es train-data-es \
-        dry-run-es train-es phase5
+        dry-run-es train-es evaluate-es phase1-es phase5
 
 PYTHON ?= python
 COMPOSE = docker compose -f docker/docker-compose.yml
@@ -173,12 +173,17 @@ evaluate-test:  ## Unseal the held-out split. Once per model, at the very end.
 trim-vocab:  ## Trim the base model's vocabulary to the rows German and English use
 	$(PYTHON) scripts/trim_vocab.py --threshold 0.999
 
+# The adapter `evaluate-es` scores, and the row label it writes under.
+# Overridable so a second recipe does not overwrite the first one's report:
+#   make evaluate-es ADAPTER_ES=checkpoints/phase3-es-cw025 NAME_ES=fine-tuned-es-cw025
+ADAPTER_ES ?= checkpoints/phase3-es
+NAME_ES ?= fine-tuned-es
+
 # --- Phase 5: Spanish port ---------------------------------------------------
 #
-# Mirrors Phase 0/1/2/3's targets above, `-es` suffixed. No `evaluate-es` or
-# `phase5` chain to a trained model yet: `eval_finetuned.py` is not
-# language-parameterised, and there is no adapter to evaluate until a training
-# run finishes.
+# Mirrors Phase 0/1/2/3's targets above, `-es` suffixed. `eval_finetuned.py` is
+# language-parameterised now, so `evaluate-es` and a full `phase5` chain exist
+# alongside the rest.
 
 ngrams-es:  ## Download + extract the Spanish n-gram data (~1.7GB download, ~6GB on disk)
 	$(PYTHON) scripts/download_ngrams.py --lang es
@@ -224,6 +229,12 @@ dry-run-es:  ## Check the Spanish loss mask, the schema and one forward pass. Tr
 
 train-es:  ## LoRA fine-tune on the Spanish training set
 	$(PYTHON) scripts/train_sft.py --language es
+
+evaluate-es:  ## Score the Spanish adapter against the Phase 5 baselines
+	$(PYTHON) scripts/eval_finetuned.py --language es --adapter $(ADAPTER_ES) --name $(NAME_ES)
+
+phase5: train-data-es dry-run-es train-es evaluate-es  ## Everything Phase 5 needs, in order
+	@echo "Adapter in checkpoints/phase3-es/, results in reports/phase5/"
 
 # --- cleanup ----------------------------------------------------------------
 

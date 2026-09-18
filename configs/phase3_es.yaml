@@ -44,13 +44,25 @@ training:
   # `validation_size` and Falko-MERLIN dev have for German.
   validation_size: 500
   logging_steps: 25
-  eval_steps: 250
+  # Matched to `save_steps` deliberately. `load_best_model_at_end` resolves the
+  # best checkpoint by path -- `checkpoint-<best_global_step>` -- and falls back
+  # to the final weights *silently* if that directory was never written
+  # (transformers `trainer.py`, `_load_best_model`). Evaluating twice as often
+  # as saving therefore buys a finer curve at the risk of the minimum landing on
+  # a step with no checkpoint, which is the failure it is here to prevent.
+  eval_steps: 500
   save_steps: 500
-  # German's own tuning found its evaluation loss bottoming out well before
-  # the final step and stayed flat after, which is why it keeps more than the
-  # last two checkpoints. Not yet measured for Spanish -- carried over as a
-  # reasonable default, not a repeated finding.
+  # Measured for Spanish now, not carried over: evaluation loss bottoms at
+  # epoch ~2 (0.04287) and drifts to 0.04508 by epoch 3 rather than staying
+  # flat. `load_best_model_at_end` keeps the best checkpoint whatever the
+  # limit would otherwise evict, so six is about retaining the neighbourhood
+  # of the minimum for inspection, not about finding it.
   save_total_limit: 6
+  # End the run holding the weights with the lowest evaluation loss instead of
+  # the last ones. German's config deliberately does not set this: its numbers
+  # were all measured on final-step adapters and turning this on would quietly
+  # change what `checkpoints/phase3-de` means.
+  load_best_model_at_end: true
 
 output:
   # Adapter weights, not a merged model, same reason German's stays separate:

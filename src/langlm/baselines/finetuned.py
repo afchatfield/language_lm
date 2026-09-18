@@ -66,6 +66,18 @@ class FineTunedBaseline:
     max_new_tokens: int = 1024
     batch_size: int = 32
     name: str = "fine-tuned"
+    #: Which language's instruction the prompt carries. It has to be the one the
+    #: adapter was trained with: a Spanish adapter given the German instruction
+    #: is being asked a question it never saw, and the failure is quiet -- the
+    #: model still answers, in the right schema, just worse. German is the
+    #: default so every existing call site is unchanged.
+    language: str = "de"
+    #: Worked examples to prepend, as `(source, answer)` where the answer is the
+    #: JSON the model was trained to emit -- not a bare corrected sentence. An
+    #: empty list is the shape the adapter was trained on and the one every
+    #: reported number uses; anything else is an ablation, because a prompt the
+    #: model never saw in training is off-distribution by construction.
+    shots: list[tuple[str, str]] = field(default_factory=list)
     #: Stop as soon as the correction is closed. A median answer is 84 tokens
     #: and its correction 28, so this is most of the generation time -- at the
     #: cost of the `changes` list, and so of the explanation metrics.
@@ -195,7 +207,7 @@ class FineTunedBaseline:
 
         for start in range(0, len(sources), self.batch_size):
             batch = sources[start : start + self.batch_size]
-            prompts = [build_prompt(source) for source in batch]
+            prompts = [self._prompt(source) for source in batch]
             encoded = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
             with torch.no_grad():
                 generated = model.generate(
@@ -234,6 +246,21 @@ class FineTunedBaseline:
             self.faults.unchanged += 1
         self.claims.append([c for c in parsed.changes if isinstance(c, dict)])
         return parsed.correction
+
+    def _prompt(self, source: str) -> str:
+        """The trained prompt, optionally preceded by worked examples."""
+        base = build_prompt(source, self.language)
+        if not self.shots:
+            return base
+        from langlm.train.format import SOURCE_PREFIX, TARGET_PREFIX
+
+        worked = "\n\n".join(
+            f"{SOURCE_PREFIX} {src}\n{TARGET_PREFIX} {answer}" for src, answer in self.shots
+        )
+        # The instruction already heads `base`, so the examples go between it
+        # and the sentence rather than in front of the whole thing.
+        head, _, tail = base.partition("\n\n")
+        return f"{head}\n\n{worked}\n\n{tail}"
 
     def correct(self, source: str) -> str:
         return self.correct_many([source], progress=False)[0]
