@@ -35,7 +35,7 @@ from pathlib import Path
 from langlm.baselines.finetuned import FineTunedBaseline, GenerationFaults
 from langlm.config import INTERIM_DIR, PROJECT_ROOT, REPORTS_DIR, load_config
 from langlm.data.m2 import M2Sentence
-from langlm.data.splits import HELD_OUT_SPLITS, load_split
+from langlm.data.splits import HELD_OUT_SPLITS, load_split, split_scoped
 from langlm.eval import explanation_scorer, leniency, overcorrection, span_scorer
 from langlm.eval import m2_scorer as m2
 
@@ -363,14 +363,17 @@ def write_report(
             dev, annotated, beta=beta, mode="correction", equivalent=equivalent
         )
 
-    # The Phase 1/5 baselines, but only if they were measured on this split.
-    # They are a dev table; a test run is a single read of a sealed split by
-    # one chosen model, so there is deliberately nothing to compare it against
-    # here. Tabling the dev baselines beside a test score would invite exactly
-    # the comparison that reading the split once is meant to avoid.
+    # The Phase 1/5 baselines for *this* split, which is a different file per
+    # split (`split_scoped`) because a test table and a dev table are not the
+    # same measurement. Until the baselines were re-run on test this resolved
+    # to nothing on a test run and the report said so; that was the honest
+    # behaviour, not the desired one, and `run_baselines.py --split test` is
+    # what fixes it. The `split` check below stays as the belt to that braces:
+    # a row only ever enters this table if it was measured on these sentences.
     baselines = {}
-    if lang.baselines_json.exists():
-        baselines = json.loads(lang.baselines_json.read_text(encoding="utf-8"))
+    baselines_json = split_scoped(lang.baselines_json, split)
+    if baselines_json.exists():
+        baselines = json.loads(baselines_json.read_text(encoding="utf-8"))
     rows = dict(baselines.get("baselines", {})) if baselines.get("split") == split else {}
     # One report per system, so scoring a new adapter cannot overwrite the record
     # of the one that is still the best.

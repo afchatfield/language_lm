@@ -20,6 +20,7 @@ from langlm.data.splits import (
     load_split,
     sha256_file,
     split_path,
+    split_scoped,
     verify_manifest,
 )
 
@@ -131,3 +132,22 @@ def test_unknown_split_lists_what_exists(frozen: Path):
 def test_missing_manifest_points_at_the_fix(tmp_path: Path):
     with pytest.raises(ManifestError, match="make data"):
         verify_manifest(tmp_path / "nope.json")
+
+
+def test_development_reports_keep_their_historical_path():
+    """Dev is the default and must not be renamed: every report and `make`
+    target written before `split_scoped` existed points at these names."""
+    for split in ("dev", "train"):
+        assert split_scoped(Path("reports/phase1/baselines.json"), split) == Path(
+            "reports/phase1/baselines.json"
+        )
+
+
+def test_held_out_reports_get_their_own_file():
+    """A final number must never land on top of the development record."""
+    assert split_scoped(Path("reports/phase1/baselines.json"), "test") == Path(
+        "reports/phase1/baselines-test.json"
+    )
+    assert split_scoped(Path("reports/phase5/baselines_es.md"), "test") == Path(
+        "reports/phase5/baselines_es-test.md"
+    )

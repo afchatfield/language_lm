@@ -1,30 +1,22 @@
 # Phase 3: the fine-tuned model
 
-Falko-MERLIN **test**: 2,337 sentences. Overcorrection set: 400 sentences of published German prose. Scored with the same MaxMatch and ERRANT machinery as Phase 1, so these numbers sit beside those ones honestly. The test split has not been read.
+Falko-MERLIN **test**: 2,337 sentences. Overcorrection set: 400 sentences of published German prose. Scored with the same MaxMatch and ERRANT machinery as the baselines, so these numbers sit beside those ones honestly. This is the held-out split.
 
 ## The table
 
 | System | P | R | F0.5 | Overcorrection |
 |---|---:|---:|---:|---:|
-| identity | 0.0417 | 0.0002 | 0.0008 | 0.0% |
-| languagetool | 0.5653 | 0.1992 | 0.4134 | 28.7% |
-| zero-shot | 0.4761 | 0.0905 | 0.2571 | 10.0% |
-| few-shot | 0.6600 | 0.2675 | 0.5102 | 15.0% |
+| identity | 0.1026 | 0.0007 | 0.0033 | 0.0% |
+| languagetool | 0.5890 | 0.2091 | 0.4321 | 28.7% |
+| zero-shot | 0.4634 | 0.0880 | 0.2501 | 10.0% |
+| few-shot | 0.6431 | 0.2574 | 0.4948 | 15.2% |
 | cw0125-test | 0.7330 | 0.6242 | 0.7083 | 14.0% |
-| cw0125 | 0.7289 | 0.6304 | 0.7068 | 13.2% |
-| fine-tuned-iter3 | 0.7268 | 0.5953 | 0.6960 | 12.5% |
-| iter4-cw025-dpo-b5 | 0.7096 | 0.6193 | 0.6895 | 12.5% |
-| iter4-cw025-dpo | 0.6867 | 0.6274 | 0.6739 | 15.0% |
-| iter4-cw025 | 0.7339 | 0.6174 | 0.7072 | 9.8% |
-| iter4-cw05 | 0.7304 | 0.6072 | 0.7019 | 9.5% |
+| iter4-cw025-dpo-b5-test | 0.7038 | 0.6180 | 0.6848 | 12.5% |
 | iter5-dpo-test | 0.7065 | 0.6200 | 0.6873 | 15.5% |
-| iter5-dpo | 0.7066 | 0.6326 | 0.6905 | 15.5% |
 | iter5-test | 0.7325 | 0.6210 | 0.7071 | 13.0% |
-| iter5 | 0.7278 | 0.6287 | 0.7056 | 13.0% |
-| fine-tuned | 0.7273 | 0.5881 | 0.6944 | 13.0% |
 | **iter4-cw025-test** | 0.7322 | 0.6176 | **0.7060** | 9.5% |
 
-The bar is the best Phase 1 baseline, **F0.5 = 0.7083** (few-shot), not LanguageTool's 0.4134. This model **does not beat** it.
+The bar is the strongest system it is measured against, **F0.5 = 0.7083** (cw0125-test), ahead of iter5-test's 0.7071. This model **does not beat** it.
 
 ## Detection versus correction
 
@@ -45,7 +37,7 @@ The headline stays the strict number. The lenient one is worth +0.0034, which is
 
 ## Where it helps
 
-Per-error-type recall. This is the table Phase 2 is meant to be fixed from -- but read it as coverage, not as volume: across the 36 types with dev volume, the correlation between a type's train/dev volume ratio and its F0.5 is only r = 0.27, while types the corruptors produce at all average F0.5 0.679 against 0.488 for types they never produce. A weak type is one to start injecting, not one to inject more of.
+Per-error-type recall. This is the table the data pipeline is meant to be fixed from -- but read it as coverage, not as volume: across the 36 types with dev volume, the correlation between a type's train/dev volume ratio and its F0.5 is only r = 0.27, while types the corruptors produce at all average F0.5 0.679 against 0.488 for types they never produce. A weak type is one to start injecting, not one to inject more of.
 
 | Error type | Gold | Recall |
 |---|---:|---:|
@@ -82,26 +74,3 @@ Type accuracy is what the learner actually sees, because the type is the key `ru
 0 with no readable correction, 6 cut off but recovered, 968 left unchanged, out of 2,737 answers.
 
 An answer with no readable correction is scored as an unchanged sentence, which is why it is counted here rather than left to look like restraint. Cut-off answers are counted separately because the schema puts the sentence first: the correction survives and only the `changes` list is lost, so they cost the explanation metrics above rather than the score.
-
-## Sample answers
-
-```json
-{"correction": "Welche Lösung ist aber möglich , um diese Diskrepanz zwischen Studium und Arbeit , Gesellschaft und Studenten abzuwenden ?", "changes": [{"was": "abzuwischen", "now": "abzuwenden", "type": "R:SPELL"}]}
-```
-
-```json
-{"correction": "Es kann sein , dass sie den Arbeitplatz verloren haben oder keine Familie mehr haben .", "changes": [{"was": "haben , oder", "now": "haben oder", "type": "U:PUNCT"}, {"was": "haben keine", "now": "haben keine", "type": "R:ORTH"}, {"was": "mehr .", "now": "mehr haben .", "type": "M:AUX"}]}
-```
-
-```json
-{"correction": "Ich werde hauptsächlich argumentieren , dass Kriminalität sich nicht auszahlt , aber jedoch werde ich auf positive und negative Fälle von Kriminalität hinweisen .", "changes": []}
-```
-
-```json
-{"correction": "Bis wann darf ich in Deutschland bleiben ?", "changes": []}
-```
-
-```json
-{"correction": "Sowohl Universitäten , die öffentliche Verwaltung als auch Medienagenturen brauchen Mitarbeiter , die im Internet Informationen suchen können , vermitteln können und eine gute Idee verkaufen können .", "changes": [{"was": "Medienagenturen", "now": "Medienagenturen", "type": "R:SPELL"}]}
-```
-

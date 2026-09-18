@@ -1,8 +1,10 @@
 # Spanish port — Phase 5
 
-> **Status: trained and measured.** Two adapters, both scored against the full
-> Phase 5 baseline table on COWS-L2H dev, and one read of the held-out test
-> split. Every number below came from a run on real data; none is projected.
+> **Status: trained, measured and compressed.** Two adapters, both scored
+> against the full Phase 5 baseline table on COWS-L2H dev, one read of the
+> held-out test split, and the Phase 4 compression recipe re-run for Spanish at
+> **756.7 MB**. Every number below came from a run on real data; none is
+> projected.
 
 Phase 5's purpose is to test whether the German architecture generalises, or
 whether it only ever worked because it was built once, for one language, with
@@ -236,6 +238,9 @@ chosen. COWS-L2H test, 4,284 sentences, 7,333 gold edits:
 
 | | P | R | F0.5 | Overcorrection |
 |---|---:|---:|---:|---:|
+| LanguageTool (`es`) | 0.4547 | 0.1630 | 0.3348 | 27.3% |
+| zero-shot EuroLLM | 0.4632 | 0.0610 | 0.1997 | 11.2% |
+| few-shot EuroLLM | 0.6092 | 0.1210 | 0.3371 | 8.0% |
 | **fine-tuned, `changes` weight 0.25** | 0.6878 | 0.4867 | **0.6353** | 6.0% |
 
 **Higher than dev's 0.5987, by +0.0366** — the opposite of the direction a
@@ -246,13 +251,19 @@ by salted learner id), so they are not interchangeable draws and a gap in
 either direction is expected. Explanation quality holds: coverage 0.931,
 precision 0.969, type accuracy 0.827, against dev's 0.925 / 0.969 / 0.818.
 
-`reports/phase5/evaluation-fine-tuned-es-cw025-test.md` carries this one row
-and no bar. It used to table the dev baselines beside it, which invited exactly
-the comparison that reading a sealed split once is meant to avoid — 0.6353 is a
-test number and the 0.3179 it sat next to was not. The report generator now
-records which split each result came from and compares only within one, so a
-held-out run stands alone and the comparisons stay on dev, where every other
-system in this document was measured.
+**The baselines are now measured on test too**, so every row above comes off the
+same 4,284 sentences. That was not true when this section was first written: the
+report carried one row and no bar, because the report generator records which
+split each result came from and compares only within one, and nothing but the
+fine-tuned model had been run on test. Tabling the dev baselines beside it would
+have invited exactly the comparison that reading a sealed split once is meant to
+avoid — 0.6353 is a test number and the 0.3179 it used to sit next to was not.
+
+`run_baselines.py --split test` closed that gap rather than the report relaxing
+its rule. **The margin over the strongest baseline is +0.2982** (few-shot, 0.3371),
+and the ordering of the two baselines swaps between splits — LanguageTool leads
+few-shot on dev by 0.0102 and trails it on test by 0.0023, which is the same
+statistical tie the dev section describes, seen twice.
 
 ### Where it wins, and where it does not
 
@@ -275,6 +286,41 @@ morphology — `R:VERB:FORM` 0.36, `R:AUX:FORM` 0.26, `R:VERB` 0.25 — is
 exactly where preterite/imperfect was dropped because `es_core_news_sm` could
 not tag it reliably, and where `verb_infinitive` ships with a measured 22.3%
 mistype rate. The declined corruptor is legible in the scoreboard.
+
+## Compression
+
+The Phase 4 recipe, re-run for Spanish end to end. Full numbers in
+[compression_es.md](reports/phase5/compression_es.md).
+
+| | German | Spanish |
+|---|---:|---:|
+| vocabulary kept | 39,399 / 128,000 | **39,886** / 128,000 |
+| parameters removed | 21.9% | **21.8%** |
+| Q4_K_M | 997 → 755.4 MB | 996.7 → **756.7 MB** |
+| ΔF0.5 from the trim | −0.0012 | **−0.0038** |
+| 95% CI | [−0.0043, +0.0019] | **[−0.0068, −0.0009]** |
+
+**The trim ports almost exactly**, and nothing forced that: the Spanish kept set
+was counted independently, over Spanish and English prose plus the Spanish task
+corpus. Both languages need about 39,600 rows and free about 21.8% of the
+parameters, because the saving is dominated by how much of a 128,000-row
+multilingual vocabulary *any* one European language leaves untouched. The
+adapter was reused unchanged on the trimmed base, no healing and no re-SFT, for
+the same reason it was in German: the LoRA targets no vocabulary-dimension
+module.
+
+**One part of Phase 4's claim does not port.** German's trim was free — its loss
+is a coin flip, p = 0.458. Spanish's is small but real: p = 0.012, with the
+confidence interval entirely below zero. It costs precision rather than recall,
+overcorrection rising 6.0% → 7.5% while recall is flat. Still under half a
+percent of the score, and still smaller than the dev/test spread, but "free" was
+a German result and is not restated here as a Spanish one.
+
+**The gate's warning was repeated and passed.** Phase 4 caught a trim that
+deleted the JSON structural tokens because it counted prose alone, and said in
+writing that Spanish would have to be checked the same way. It was: the Spanish
+trim counts the task corpus too, and the schema survives at 2 unreadable answers
+in 5,116 — the untrimmed model's own rate.
 
 ## Does the architecture generalise?
 
@@ -300,11 +346,12 @@ rather than about whether the architecture travels.
 
 ## What is genuinely not done yet
 
-- **No cross-lingual pruning experiment** (evaluating the German-pruned model
-  on Spanish and vice versa). Phase 4 trimmed the vocabulary to the rows
-  German and English text touches, which makes this a real test rather than a
-  formality: Spanish's accented forms are single tokens, and whether they
-  survived that trim is not something to guess at.
+- **The cross-lingual pruning experiment is half done.** The tokenizer half is
+  measured: the German and Spanish kept sets share 29,061 rows, a single
+  bilingual model could not go below their 50,224-row union, and each language's
+  text costs **+40–56% more tokens** under the other language's trim against
+  +0.5–1.5% under its own. What is still open is the weights half — scoring one
+  language's compressed model on the other language's task.
 - **No preference training.** German's iteration 6 ran DPO over its own beam;
   this port stops at supervised fine-tuning, for the same reason it stops
   short of back-translation.

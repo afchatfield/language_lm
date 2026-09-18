@@ -21,8 +21,12 @@ generates the ones that are missing.
     python scripts/run_baselines.py --limit 100        # smoke test
     python scripts/run_baselines.py --only few-shot --batch-size 16
 
-The test split is not touched. It stays frozen until Phase 3 (or Phase 5's
-final measurement).
+The development split is the default and is what every tuning decision was
+made against. `--split test` unseals the held-out split, which Phase 0 froze on
+day one; it is guarded the same way `eval_finetuned.py` guards it, and writes to
+its own report so a final number can never overwrite the development record.
+
+    python scripts/run_baselines.py --split test        # once, at the very end
 """
 
 from __future__ import annotations
@@ -40,7 +44,7 @@ from langlm.baselines.languagetool import LanguageToolBaseline
 from langlm.baselines.prompted import PromptedBaseline, sample_shots
 from langlm.config import INTERIM_DIR, REPORTS_DIR, load_config
 from langlm.data.m2 import M2Sentence
-from langlm.data.splits import load_split
+from langlm.data.splits import HELD_OUT_SPLITS, load_split, split_scoped
 from langlm.eval import m2_scorer as m2
 from langlm.eval import overcorrection, span_scorer
 
@@ -132,6 +136,12 @@ def main() -> None:
         help="German kept as the default so every existing invocation is unchanged.",
     )
     parser.add_argument(
+        "--split",
+        default=None,
+        help="Which split of the learner corpus to score. Defaults to the configured "
+        "dev split. Pass `test` only for a final number that nothing will be tuned on.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         help="Override the model batch size. Few-shot prompts are several hundred "
@@ -142,9 +152,15 @@ def main() -> None:
 
     lang = LANGUAGES[args.language]
     config = load_config(lang.config_name)
-    split = config["evaluation"]["split"]
+    split = args.split or config["evaluation"]["split"]
 
-    dev = load_split(lang.corpus, split)
+    held_out = split in HELD_OUT_SPLITS
+    if held_out:
+        print(
+            f"** {split} is the held-out split. These are final numbers: nothing should be "
+            f"tuned on what comes back. **"
+        )
+    dev = load_split(lang.corpus, split, allow_test=held_out)
     clean = load_split(overcorrection_module(lang).CORPUS, "all")
     if args.limit:
         dev, clean = dev[: args.limit], clean[: args.limit]
@@ -163,7 +179,7 @@ def main() -> None:
                 batch_size=args.batch_size,
             )
 
-    write_report(dev, clean, config, lang)
+    write_report(dev, clean, config, lang, split)
 
 
 # --- generation -------------------------------------------------------------
@@ -302,7 +318,11 @@ def score_baseline(
 
 
 def write_report(
-    dev: Sequence[M2Sentence], clean: Sequence[M2Sentence], config: dict, lang: LanguageSettings
+    dev: Sequence[M2Sentence],
+    clean: Sequence[M2Sentence],
+    config: dict,
+    lang: LanguageSettings,
+    split: str,
 ) -> None:
     """Score every generated baseline and write the results table."""
     beta = config["evaluation"]["beta"]
@@ -311,16 +331,16 @@ def write_report(
         print("Nothing generated yet; no report written.")
         return
 
-    lines = _report_lines(results, dev, clean, config, lang)
+    lines = _report_lines(results, dev, clean, config, lang, split)
     lang.report_dir.mkdir(parents=True, exist_ok=True)
     name = "baselines.md" if lang.annotator == "de" else "baselines_es.md"
-    output = lang.report_dir / name
+    output = split_scoped(lang.report_dir / name, split)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\nWrote {output}")
 
     meta = {
         "written_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "split": config["evaluation"]["split"],
+        "split": split,
         "sentences": len(dev),
         "overcorrection_sentences": len(clean),
         "baselines": {
@@ -334,13 +354,13 @@ def write_report(
         },
     }
     meta_name = "baselines.json" if lang.annotator == "de" else "baselines_es.json"
-    (lang.report_dir / meta_name).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    meta_path = split_scoped(lang.report_dir / meta_name, split)
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
 
 def _report_lines(
-    results: list[dict], dev, clean, config: dict, lang: LanguageSettings
+    results: list[dict], dev, clean, config: dict, lang: LanguageSettings, split: str
 ) -> list[str]:
-    split = config["evaluation"]["split"]
     beta = config["evaluation"]["beta"]
     model = config["baselines"]["model"]["repo_id"]
     gold_edits = sum(len(s.edits_for()) for s in dev)
@@ -352,7 +372,14 @@ def _report_lines(
         "",
         f"{corpus_name} **{split}**: {len(dev):,} sentences, {gold_edits:,} gold edits. "
         f"Overcorrection set: {len(clean):,} sentences of published {lang.prose_name} prose "
-        f"that need no correction. The test split has not been read.",
+        f"that need no correction. "
+        + (
+            "This is the held-out split, read once so that the fine-tuned model has a bar "
+            "measured on the same sentences it is scored on. Every tuning decision in this "
+            "project was made against dev, whose table is in the report beside this one."
+            if split in HELD_OUT_SPLITS
+            else "The test split has not been read."
+        ),
         "",
         "## The table",
         "",

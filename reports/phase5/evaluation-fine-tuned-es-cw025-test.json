@@ -9,7 +9,7 @@
   "correction_f": 0.5932,
   "lenient_f0.5": null,
   "lenient_correction_f": null,
-  "baseline_bar": 0.0,
+  "baseline_bar": 0.3371,
   "explanation": {
     "coverage": 0.9309,
     "precision": 0.9689,

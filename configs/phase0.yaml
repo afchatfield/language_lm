@@ -44,6 +44,15 @@ corpora:
   - key: es_news
     lang: es
     leipzig: spa_news_2023_100K
+  # Added for the Phase 5 vocabulary trim, which counts coverage over the same
+  # shape of corpus German's did: two corpora in the target language plus
+  # English. Without it Spanish would be trimmed on news alone and German on
+  # news + Wikipedia, and the two footprints would not be comparable -- which
+  # is the one thing the cross-lingual comparison needs them to be. The Phase 0
+  # fertility report predates this entry and did not measure it.
+  - key: es_wikipedia
+    lang: es
+    leipzig: spa_wikipedia_2021_100K
 
 # --- analysis ----------------------------------------------------------------
 analysis:

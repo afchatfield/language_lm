@@ -236,9 +236,23 @@ explanations. Overcorrection rate under control.
       model with three names (they span 0.0023 and the ranking *inverts* between
       splits), so the choice was made on overcorrection, where a 4.5-point gap
       replicates across both.
-- [ ] Re-run the Phase 1 baselines on test before any README claim.
-      `scripts/run_baselines.py` is hard-wired to dev, so "beats LanguageTool by
-      0.29" currently compares a test row against a dev baseline.
+- [x] Re-run the Phase 1 baselines on test before any README claim.
+      `run_baselines.py --split test` now exists, guarded the same way
+      `eval_finetuned.py` guards it and writing to `baselines-test.md` so a final
+      number can never land on top of the development record. **The README's
+      "+0.29" was flattered at both ends.** LanguageTool scores *better* on test
+      than on dev (0.4321 against 0.4134) and few-shot scores *worse* (0.4948
+      against 0.5102), so the honest margin is **+0.2739**, not +0.29. The
+      conclusion is unchanged; the number can now be quoted on its own.
+      `reports/phase1/baselines-test.md`.
+
+      | System | dev | test |
+      |---|---:|---:|
+      | identity | 0.0008 | 0.0033 |
+      | LanguageTool | 0.4134 | 0.4321 |
+      | zero-shot | 0.2571 | 0.2501 |
+      | few-shot | 0.5102 | 0.4948 |
+      | iter4-cw025 | 0.7072 | 0.7060 |
 
 > **Met at iteration 2 and held since.** F0.5 0.7072 against LanguageTool's 0.4134 and
 > few-shot's 0.5102, overcorrection 9.8% against LanguageTool's 28.7%. The contingency
@@ -521,8 +535,68 @@ exist before the freeze could — noting the resequencing rather than quietly do
   few-shot EuroLLM — the bar that actually matters, per Phase 1's own finding that the prompted
   base model, not LanguageTool, is the honest target — were running at the time of this entry;
   see `reports/phase5/baselines_es.md` for whichever numbers are current.
+- [x] Spanish baselines on test as well as dev, the Phase 5 counterpart of the
+      Phase 3 item above. The held-out Spanish table had one row and no bar until
+      now. **Margin over the strongest baseline: +0.2982** (few-shot, 0.3371).
+      The two baselines swap places between splits — LanguageTool leads few-shot
+      by 0.0102 on dev and trails by 0.0023 on test — which is the same tie the
+      dev entry already called a tie, seen a second time.
+      `reports/phase5/baselines_es-test.md`.
+- [x] Spanish SFT. Two recipes trained and scored against the full baseline table on
+      dev; `cw025` carried forward, matching German's own choice of `changes_weight`.
+      **F0.5 0.5987 dev, 0.6353 test, overcorrection 6.0%.** The Phase 5 list never
+      had a checkbox for training the model it exists to produce — noting that the
+      plan was short an item rather than back-dating one.
+- [x] **Compress the Spanish model** — the Phase 4 recipe, re-run end to end.
+      `reports/phase5/compression_es.md`.
+  - [x] Vocabulary trim counted over Spanish + English prose *and* the Spanish task
+        corpus — `trim_vocab.py --language es` exists because the task corpus is
+        what carries the schema, and Phase 4's gate said in writing that Phase 5
+        had to repeat that check. It was repeated and it passes: 2 unreadable
+        answers in 5,116, the untrimmed model's own rate.
+  - [x] `merge_adapter.py` — the merge step that produced German's `ship-*`
+        checkpoints was never scripted; now it is.
+  - [x] Q4_K_M, measured not projected. Both trimmed models re-quantised with one
+        llama.cpp build so the sizes are comparable, and German's reproduces
+        Phase 4's published 755 MB. Spanish's uncompressed 996.7 MB is also the
+        first *measured* value for that row in either language — Phase 4 never
+        converted its uncompressed model to GGUF — and it corroborates the 997 MB
+        that has been carried since.
 - [ ] Cross-lingual pruning experiment: evaluate German-pruned model on Spanish and vice versa
       → how much does language-specific pruning cost cross-lingually?
+      **Half-answered.** The tokenizer half is measured in `compression_es.md`: the two
+      kept sets share 29,061 rows, a bilingual model's floor is their 50,224-row union
+      (27.5% above either), and each language's text costs **+40–56% more tokens** under
+      the other language's trim while its own trim costs it +0.5–1.5%. What is still
+      open is the *weights* half — scoring one language's compressed model on the other
+      language's task.
+
+> **Outcome: the trim ports, and one part of Phase 4's claim does not.**
+>
+> | | German | Spanish |
+> |---|---:|---:|
+> | vocabulary kept | 39,399 | **39,886** |
+> | parameters removed | 21.9% | **21.8%** |
+> | Q4_K_M | 755.4 MB | **756.7 MB** |
+> | ΔF0.5 from the trim | −0.0012 | **−0.0038** |
+> | 95% CI | [−0.0043, +0.0019] | **[−0.0068, −0.0009]** |
+> | p | 0.458 | **0.012** |
+>
+> Nothing forced those first three rows within 1.3% of each other: the Spanish kept set
+> was counted independently, from Spanish corpora and a Spanish task file. The saving is
+> dominated by how much of a 128,000-row multilingual vocabulary *any* one European
+> language leaves untouched.
+>
+> **But "the trim is free" was a German finding.** German's loss is a coin flip; Spanish's
+> is small and real — under half a percent of its own score, and smaller than the ±0.005
+> dev/test spread, but its confidence interval sits entirely below zero. It is precision,
+> not recall: overcorrection rises 6.0% → 7.5% while recall is flat. Phase 4's headline is
+> restated here as *nearly* free rather than quietly re-used.
+>
+> A false alarm worth not re-raising: the quantised Spanish model returns bare text under
+> `llama-cli`, which looks exactly like the gate's schema failure. The German shipped model
+> does the same — `llama-cli` injects a chat template these base-format checkpoints never
+> saw. The harness was wrong, not the checkpoint.
 
 **Exit criterion:** if adding Spanish took more than a week, the abstraction was wrong.
 Say so honestly in the README rather than hiding it.

@@ -55,8 +55,10 @@ for five candidate models. Full table in [test.md](reports/phase3/test.md).
 
 | | dev | test |
 |---|---:|---:|
-| F0.5 | 0.7072 | **0.7060** |
-| Overcorrection | 9.8% | **9.5%** |
+| LanguageTool 6.8 + n-grams | 0.4134 | 0.4321 |
+| EuroLLM-1.7B few-shot (8 ex.) | 0.5102 | 0.4948 |
+| **this model**, F0.5 | 0.7072 | **0.7060** |
+| **this model**, overcorrection | 9.8% | **9.5%** |
 
 **Six iterations of tuning against dev did not overfit it.** Every candidate
 landed within 0.005 of its dev score, mean absolute gap 0.0024 — so the dev
@@ -67,11 +69,13 @@ span 0.0023 of F0.5 and their ranking **inverts** between dev and test. F0.5
 cannot choose between them, so the shipped model was chosen on overcorrection,
 where a 4.5-point gap replicates on both splits.
 
-> One bookkeeping caveat: the LanguageTool and few-shot rows are dev-only, since
-> `scripts/run_baselines.py` is still hard-wired to the dev split. The two tables
-> above are each internally consistent, and the 0.29 gap is far too wide for the
-> split to change the conclusion, but the baselines should get a test run before
-> any of this is quoted as a single number. Tracked in the roadmap.
+The baselines have now been run on test too, so every number in that column is
+measured on the same 2,337 sentences. **The honest margin over LanguageTool is
++0.2739**, not the +0.29 this README quoted while it was comparing a test score
+against a dev baseline. LanguageTool scores *better* on test than on dev (0.4321
+against 0.4134) and few-shot scores worse (0.4948 against 0.5102), so the
+mis-matched comparison had been flattering the gap at both ends. The conclusion
+is unchanged and the number is now the one that can be quoted on its own.
 
 ## How it works
 

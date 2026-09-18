@@ -6,9 +6,13 @@ COWS-L2H **test**: 4,284 sentences. Overcorrection set: 400 sentences of publish
 
 | System | P | R | F0.5 | Overcorrection |
 |---|---:|---:|---:|---:|
+| identity | 0.5000 | 0.0001 | 0.0007 | 0.0% |
+| languagetool | 0.4547 | 0.1630 | 0.3348 | 27.3% |
+| zero-shot | 0.4632 | 0.0610 | 0.1997 | 11.2% |
+| few-shot | 0.6092 | 0.1210 | 0.3371 | 8.0% |
 | **fine-tuned-es-cw025-test** | 0.6878 | 0.4867 | **0.6353** | 6.0% |
 
-Nothing else has been measured on this split, so this table has one row and no bar. That is what reading a held-out split once means: the baselines and every other recipe were scored on dev, and the comparison belongs there.
+The bar is the strongest system it is measured against, **F0.5 = 0.3371** (few-shot), ahead of languagetool's 0.3348. This model **beats** it.
 
 ## Detection versus correction
 

@@ -11,11 +11,12 @@
         clean-corpus lt-survey weights training-set phase2 thesaurus \
         check-corruptors check-citations corrupter backtranslation \
         setup-cuda train-data dry-run train evaluate phase3 \
-        preference-pairs train-dpo evaluate-test trim-vocab \
+        preference-pairs train-dpo evaluate-test trim-vocab baselines-test \
         clean-ngrams clean-data \
         ngrams-es corpora-es data-es dictionary-es overcorrection-es \
         baselines-es clean-corpus-es training-set-es train-data-es \
-        dry-run-es train-es evaluate-es phase1-es phase5
+        dry-run-es train-es evaluate-es phase1-es phase5 \
+        baselines-es-test trim-vocab-es compress-es
 
 PYTHON ?= python
 COMPOSE = docker compose -f docker/docker-compose.yml
@@ -91,6 +92,9 @@ errant-check:  ## Measure the German ERRANT annotator against the corpus annotat
 
 baselines:  ## Run every Phase 1 baseline and write the results table
 	$(PYTHON) scripts/run_baselines.py
+
+baselines-test:  ## The same baselines on the held-out split, so a test score has a test bar
+	$(PYTHON) scripts/run_baselines.py --split test
 
 phase1: dictionary overcorrection errant-check baselines  ## Run the whole of Phase 1
 	@echo "Phase 1 artefacts are in reports/phase1/"
@@ -232,6 +236,28 @@ train-es:  ## LoRA fine-tune on the Spanish training set
 
 evaluate-es:  ## Score the Spanish adapter against the Phase 5 baselines
 	$(PYTHON) scripts/eval_finetuned.py --language es --adapter $(ADAPTER_ES) --name $(NAME_ES)
+
+# The adapter that actually ships, which is not `ADAPTER_ES`: that one is the
+# knob for scoring whichever recipe is being tried, and defaults to the first
+# run. `cw025` is the one Phase 5 chose, the Spanish counterpart of German's
+# `iter4-cw025`, so compression measures that one unless told otherwise.
+SHIP_ADAPTER_ES ?= checkpoints/phase3-es-cw025
+
+baselines-es-test:  ## Spanish baselines on the held-out split (needs lt-up with ngrams-es)
+	$(PYTHON) scripts/run_baselines.py --language es --split test
+
+trim-vocab-es:  ## Trim to the rows Spanish and English use, task corpus included
+	$(PYTHON) scripts/trim_vocab.py --threshold 0.999 --language es --languages es en \
+		--out checkpoints/base-trimmed-es
+
+# `--language es` counts the Spanish task corpus, which is what keeps the JSON
+# schema tokens; `--languages es en` picks the prose corpora. Phase 4's gate
+# failed by counting only the second, so they stay separate flags.
+compress-es: trim-vocab-es  ## Trim, merge the adapter, and score the trimmed Spanish model
+	$(PYTHON) scripts/merge_adapter.py --base checkpoints/base-trimmed-es \
+		--adapter $(SHIP_ADAPTER_ES) --out checkpoints/ship-es
+	$(PYTHON) scripts/eval_finetuned.py --language es --base checkpoints/base-trimmed-es \
+		--adapter $(SHIP_ADAPTER_ES) --name trimmed-nohealing-es
 
 phase5: train-data-es dry-run-es train-es evaluate-es  ## Everything Phase 5 needs, in order
 	@echo "Adapter in checkpoints/phase3-es/, results in reports/phase5/"

@@ -4,6 +4,12 @@
     python scripts/trim_vocab.py --threshold 0.999
     python scripts/trim_vocab.py --threshold 0.999 --sentences 20000  # quicker
 
+Phase 5 trims for Spanish instead, which is a different kept set and so a
+different model -- the prose corpora and the task corpus both change:
+
+    python scripts/trim_vocab.py --language es --languages es en \
+        --out checkpoints/base-trimmed-es
+
 No training happens here, which is the point: the roadmap's Phase 4 gate is to
 confirm a trimmed checkpoint still converts before spending GPU hours healing
 one. What comes out is a standard Hugging Face checkpoint with `vocab_size`
@@ -60,6 +66,15 @@ def main() -> None:
         default=["de", "en"],
         help="Language codes whose usage protects a vocabulary row",
     )
+    parser.add_argument(
+        "--language",
+        default="de",
+        choices=("de", "es"),
+        help="Which task corpus carries the output schema: the deployed model reads "
+        "and writes this language's prompts and answers. Separate from --languages, "
+        "which is about prose coverage: a Spanish model still needs the English rows "
+        "its prose corpus protects, but it is trained on `es.jsonl`, not `de.jsonl`.",
+    )
     args = parser.parse_args()
 
     import torch
@@ -72,7 +87,7 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(repo_id)
     counts = token_counts(tokenizer, args.languages, args.sentences, phase0)
     if not args.no_task_data:
-        counts.update(task_counts(tokenizer))
+        counts.update(task_counts(tokenizer, args.language))
 
     plan = compress_vocab.plan(tokenizer, counts, threshold=args.threshold)
     print(
@@ -103,6 +118,7 @@ def main() -> None:
                 "base": repo_id,
                 "threshold": args.threshold,
                 "languages": args.languages,
+                "task_language": args.language,
                 "sentences_per_corpus": args.sentences,
                 "original_vocab": plan.original_size,
                 "new_vocab": plan.new_size,
@@ -118,16 +134,21 @@ def main() -> None:
     print(f"\nwrote {destination}")
 
 
-def task_counts(tokenizer) -> Counter[int]:
-    """Token occurrences over the Phase 3 corpus, prompts and answers both.
+def task_counts(tokenizer, language: str = "de") -> Counter[int]:
+    """Token occurrences over the Phase 3/5 corpus, prompts and answers both.
 
     This is where the output schema lives. Counting it is what keeps `▁{` and
     friends in the vocabulary, and it also protects the ERRANT type tags the
     model has to emit.
+
+    `language` picks which training corpus, and it also picks the instruction
+    `build_prompt` writes -- the German and Spanish instructions are different
+    sentences in different languages, and the deployed model only ever reads
+    its own.
     """
     from langlm.train.format import build_prompt, build_target
 
-    path = PROCESSED_DIR / "training" / "de.jsonl"
+    path = PROCESSED_DIR / "training" / f"{language}.jsonl"
     if not path.exists():
         raise SystemExit(
             f"No training corpus at {path}. Run `make training-set`, or pass "
@@ -138,10 +159,10 @@ def task_counts(tokenizer) -> Counter[int]:
     records = 0
     for line in path.open(encoding="utf-8"):
         record = json.loads(line)
-        for text in (build_prompt(record["source"]), build_target(record)):
+        for text in (build_prompt(record["source"], language), build_target(record)):
             counts.update(tokenizer.encode(text, add_special_tokens=False))
         records += 1
-    print(f"  {'task corpus':<14} {records:>7,} examples (prompts and answers)")
+    print(f"  {'task corpus':<14} {records:>7,} examples ({language}, prompts and answers)")
     return counts
 
 
