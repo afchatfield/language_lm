@@ -13,7 +13,7 @@
 
 import { createReadStream, statSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 const CHECKPOINTS = resolve(__dirname, '../checkpoints/gguf');
 
@@ -48,7 +48,17 @@ function serveCheckpoints() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => {
+  // A production build without a model URL falls back to `/models/`, which
+  // only the dev server serves: the page then "downloads" an HTML 404 in an
+  // instant and fails. Refuse to build it instead.
+  if (command === 'build' && !loadEnv(mode, __dirname).VITE_MODEL_BASE) {
+    throw new Error('VITE_MODEL_BASE is not set: see .env.production.');
+  }
+  return config;
+});
+
+const config = {
   plugins: [serveCheckpoints()],
   server: {
     headers: isolation,
@@ -59,4 +69,4 @@ export default defineConfig({
   preview: { headers: isolation },
   // wllama ships its own worker and wasm; pre-bundling breaks the wasm URL.
   optimizeDeps: { exclude: ['@wllama/wllama'] },
-});
+};
