@@ -517,10 +517,21 @@ exist before the freeze could — noting the resequencing rather than quietly do
   Confirms the prediction made from the rule-file size alone before any of this ran (`rules/es.yaml`
   had no LT survey yet, but German's `grammar.xml` was already known to be 4.9 MB against
   Spanish's 2.1 MB): the Spanish LanguageTool baseline is real but weaker than German's
-  (F0.5 0.3175 vs 0.4134), on a similar overcorrection rate (27.3% vs 28.7%). Zero-shot and
-  few-shot EuroLLM — the bar that actually matters, per Phase 1's own finding that the prompted
-  base model, not LanguageTool, is the honest target — were running at the time of this entry;
-  see `reports/phase5/baselines_es.md` for whichever numbers are current.
+  (F0.5 0.3175 vs 0.4134), on a similar overcorrection rate (27.3% vs 28.7%).
+
+  **Zero-shot and few-shot EuroLLM — the bar that actually matters, per Phase 1's own finding
+  that the prompted base model, not LanguageTool, is the honest target — were attempted locally
+  and abandoned.** The M1 was already critically low on disk (616MB free) when the run started;
+  under that pressure the run pushed the machine into severe swapping — 7.6GB of 9.2GB swap in
+  use, ~54MB of physical RAM free, 30+ minutes without finishing even the first of four stages —
+  and was killed rather than left to thrash for an unknown number of hours. LanguageTool's Docker
+  container was stopped and Docker Desktop quit alongside it, freeing the memory both were
+  competing for. No partial output was written — `data/interim/phase1_es/` holds only the
+  identity and LanguageTool hypothesis files, both complete. **Deferred to the H200**, where
+  disk and memory headroom are not in question and this pairs naturally with the training run
+  already planned there — `python scripts/run_baselines.py --language es --only zero-shot few-shot`
+  once LanguageTool is brought back up (`make lt-up lt-check`) and `configs/phase1_es.yaml`'s
+  model settings are confirmed to fit the box.
 - [ ] Cross-lingual pruning experiment: evaluate German-pruned model on Spanish and vice versa
       → how much does language-specific pruning cost cross-lingually?
 

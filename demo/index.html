@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>langlm</title>
+    <meta name="description" content="German and Spanish grammar correction, running entirely in your browser." />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>langlm</h1>
+        <p class="tagline">
+          Grammar correction for learners of German and Spanish. The model runs in this tab;
+          nothing you type leaves your machine.
+        </p>
+      </header>
+
+      <div class="languages" role="radiogroup" aria-label="Language">
+        <button type="button" role="radio" data-language="de" aria-checked="true">Deutsch</button>
+        <button type="button" role="radio" data-language="es" aria-checked="false">Español</button>
+      </div>
+
+      <section class="model" aria-live="polite">
+        <div class="model-row">
+          <span id="model-status">Checking for a cached model…</span>
+          <button type="button" id="load" hidden>Download</button>
+        </div>
+        <div class="progress" id="progress" hidden><div id="progress-bar"></div></div>
+      </section>
+
+      <section class="input">
+        <label for="text" class="visually-hidden">Text to correct</label>
+        <textarea id="text" rows="4" spellcheck="false" placeholder="Write a sentence…"></textarea>
+        <div class="examples" id="examples"></div>
+        <div class="actions">
+          <span class="hint">⌘/Ctrl + Enter</span>
+          <button type="button" id="correct" class="primary" disabled>Correct</button>
+        </div>
+      </section>
+
+      <section id="results" aria-live="polite"></section>
+
+      <footer>
+        <p>
+          A fine-tuned, vocab-trimmed EuroLLM-1.7B at 4-bit, run by
+          <a href="https://github.com/ngxson/wllama">wllama</a> (llama.cpp compiled to WebAssembly).
+          The first visit downloads the model once; after that it loads from your browser's storage
+          and works offline.
+        </p>
+        <p>
+          Explanations are rendered from the error type the model reports. The command-line tool
+          re-derives the type with ERRANT, which is more often right; that needs spaCy, which does
+          not run here.
+        </p>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -30,3 +30,6 @@ wandb/
 .DS_Store
 .idea/
 .vscode/
+
+# Demo (Node)
+node_modules/

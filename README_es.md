@@ -152,17 +152,28 @@ archive). Identity and LanguageTool are measured:
 Weaker than German's LanguageTool baseline (F0.5 0.4134), which the Spanish
 grammar rule file's size predicted before any of this ran — but LanguageTool
 was never the bar that mattered for German either; Phase 1 found the prompted
-base model beat it. Zero-shot and few-shot EuroLLM are what decide that for
-Spanish, and are either running or complete by the time this is read: see
-`reports/phase5/baselines_es.md` for the current numbers.
+base model beat it.
+
+**Zero-shot and few-shot EuroLLM — what actually decides that — were attempted
+locally and deferred to the H200.** The M1 was already low on disk when the
+run started; it pushed the machine into severe swapping (7.6GB of 9.2GB swap
+in use, ~54MB of physical RAM free) without finishing even the first of four
+generation stages in 30+ minutes, and was killed rather than left to thrash.
+No partial output was written. LanguageTool's Docker container was stopped
+and Docker Desktop quit alongside it. Re-run with
+`python scripts/run_baselines.py --language es --only zero-shot few-shot`
+once `make lt-up lt-check` is back up on a box with real headroom.
 
 ## What is genuinely not done yet
 
-- **No trained model, no F0.5, no per-type breakdown.** `train_sft.py
+- **No zero-shot/few-shot baseline, no trained model, no F0.5, no per-type
+  breakdown.** `train_sft.py
   --language es` is verified ready; it has not been run to completion.
-- **No Makefile targets.** Every script above is run directly with `python`;
-  nothing is wired into `make train-data` / `make training-set` / `make
-  train`'s Spanish equivalents yet.
+- ~~No Makefile targets~~ — added: `make ngrams-es`, `corpora-es`, `data-es`,
+  `dictionary-es`, `overcorrection-es`, `baselines-es`, `phase1-es`,
+  `clean-corpus-es`, `training-set-es`, `train-data-es`, `dry-run-es`,
+  `train-es`. No `evaluate-es`/`phase5` chain yet — `eval_finetuned.py` is not
+  language-parameterised, and there is no adapter to evaluate.
 - **No cross-lingual pruning experiment** (evaluating the German-pruned model
   on Spanish and vice versa) — waits on a trained Spanish model to exist.
 
@@ -179,9 +190,21 @@ python scripts/build_training_set_es.py
 
 python scripts/train_sft.py --language es --limit 64 --dry-run   # check first
 python scripts/train_sft.py --language es                        # the real run
+
+python scripts/run_baselines.py --language es --only identity languagetool  # cheap, safe locally
+python scripts/run_baselines.py --language es --only zero-shot few-shot     # needs real headroom
 ```
 
 Needs the same Docker-free local setup as German's `make train-data`, plus
 `es_core_news_sm` (`python -m spacy download es_core_news_sm`, already added
 to `environment.yml`) and the Spanish Hunspell dictionary, fetched
 automatically on first use the same way German's is.
+
+**A lesson learned running this on a 16GB M1, worth repeating before anyone
+else hits it:** `identity`/`languagetool` are cheap — no model, done in
+minutes. `zero-shot`/`few-shot` load EuroLLM-1.7B and batch-generate over
+5,116 sentences four times over; on a machine already short on memory or disk
+this pushes into swap and can effectively hang rather than merely run slowly.
+Check `vm_stat` / `sysctl vm.swapusage` if a run seems stuck past what
+`batch_size` and the sentence count would predict, and prefer running these
+two on the H200 alongside training, where headroom isn't in question.
