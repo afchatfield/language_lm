@@ -1,0 +1,6 @@
+# Cloudflare Pages response headers. Cross-origin isolation is what gives
+# wllama SharedArrayBuffer, and with it threads; without these two the page
+# still works, on one thread. Vite copies public/ into dist/ unchanged.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
