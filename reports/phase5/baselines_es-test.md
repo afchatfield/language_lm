@@ -1,19 +1,19 @@
 # Phase 5 baselines (Spanish)
 
-COWS-L2H **dev**: 4,716 sentences, 7,563 gold edits. Overcorrection set: 400 sentences of published Spanish prose that need no correction. The test split has not been read.
+COWS-L2H **test**: 4,284 sentences, 7,333 gold edits. Overcorrection set: 400 sentences of published Spanish prose that need no correction. This is the held-out split, read once so that the fine-tuned model has a bar measured on the same sentences it is scored on. Every tuning decision in this project was made against dev, whose table is in the report beside this one.
 
 ## The table
 
 | System | P | R | F0.5 | Overcorrection | Spurious edits |
 |---|---:|---:|---:|---:|---:|
-| identity | 0.0000 | 0.0000 | **0.0000** | 0.0% | 0 |
-| languagetool | 0.4241 | 0.1588 | **0.3179** | 27.3% | 151 |
-| zero-shot | 0.3872 | 0.0510 | **0.1671** | 11.2% | 172 |
-| few-shot | 0.5664 | 0.1088 | **0.3077** | 8.0% | 37 |
+| identity | 0.5000 | 0.0001 | **0.0007** | 0.0% | 0 |
+| languagetool | 0.4547 | 0.1630 | **0.3348** | 27.3% | 151 |
+| zero-shot | 0.4632 | 0.0610 | **0.1997** | 11.2% | 172 |
+| few-shot | 0.6092 | 0.1210 | **0.3371** | 8.0% | 37 |
 
 F0.5 is MaxMatch (Dahlmeier and Ng, 2012) over the corrected sentences. *Overcorrection* is the share of already-correct sentences the system changed at all; *spurious edits* counts the individual changes it made to them.
 
-The metric's own ceiling on this split is **F0.5 = 0.9948**, not 1.0: that is what a system scores when it reproduces the annotator's corrections exactly. MaxMatch recovers a system's edits from an optimal alignment between the original and the correction, and 50 of the corpus's 7,563 edits are drawn in a way that no optimal alignment produces. Read every score below against that number rather than against 1.
+The metric's own ceiling on this split is **F0.5 = 0.9986**, not 1.0: that is what a system scores when it reproduces the annotator's corrections exactly. MaxMatch recovers a system's edits from an optimal alignment between the original and the correction, and 20 of the corpus's 7,333 edits are drawn in a way that no optimal alignment produces. Read every score below against that number rather than against 1.
 
 ## Detection versus correction
 
@@ -21,30 +21,30 @@ Span-level ERRANT scoring. *Detection* asks only whether the system flagged the 
 
 | System | Detection F0.5 | Correction F0.5 | Gap |
 |---|---:|---:|---:|
-| identity | 0.0000 | 0.0000 | +0.0000 |
-| languagetool | 0.3951 | 0.2849 | +0.1102 |
-| zero-shot | 0.1916 | 0.1374 | +0.0542 |
-| few-shot | 0.3480 | 0.2831 | +0.0649 |
+| identity | 0.0007 | 0.0000 | +0.0007 |
+| languagetool | 0.4270 | 0.3078 | +0.1192 |
+| zero-shot | 0.2289 | 0.1679 | +0.0610 |
+| few-shot | 0.3883 | 0.3149 | +0.0735 |
 
 ## Where each system helps
 
 | Error type | Gold | identity R | languagetool R | zero-shot R | few-shot R |
 |---|---:|---:|---:|---:|---:|
-| `R:OTHER` | 1251 | 0.00 | 0.02 | 0.02 | 0.05 |
-| `R:ORTH` | 838 | 0.00 | 0.69 | 0.11 | 0.25 |
-| `U:PRON` | 594 | 0.00 | 0.00 | 0.00 | 0.02 |
-| `R:VERB:FORM` | 357 | 0.00 | 0.07 | 0.07 | 0.12 |
-| `R:DET:FORM` | 327 | 0.00 | 0.28 | 0.05 | 0.17 |
-| `U:DET` | 303 | 0.00 | 0.05 | 0.02 | 0.04 |
-| `M:ADP` | 279 | 0.00 | 0.06 | 0.02 | 0.10 |
-| `R:ADP` | 268 | 0.00 | 0.07 | 0.03 | 0.06 |
-| `R:SPELL` | 257 | 0.00 | 0.51 | 0.30 | 0.43 |
-| `R:VERB` | 250 | 0.00 | 0.02 | 0.04 | 0.06 |
-| `M:PUNCT` | 249 | 0.00 | 0.33 | 0.00 | 0.12 |
-| `M:DET` | 247 | 0.00 | 0.01 | 0.02 | 0.16 |
-| `R:ADJ:FORM` | 221 | 0.00 | 0.21 | 0.07 | 0.15 |
-| `R:NOUN` | 199 | 0.00 | 0.14 | 0.13 | 0.19 |
-| `R:AUX:FORM` | 158 | 0.00 | 0.02 | 0.03 | 0.03 |
+| `R:OTHER` | 996 | 0.00 | 0.02 | 0.03 | 0.06 |
+| `R:ORTH` | 811 | 0.00 | 0.73 | 0.15 | 0.33 |
+| `U:PRON` | 785 | 0.00 | 0.00 | 0.00 | 0.01 |
+| `R:VERB:FORM` | 359 | 0.00 | 0.11 | 0.06 | 0.11 |
+| `R:SPELL` | 356 | 0.00 | 0.54 | 0.30 | 0.44 |
+| `R:DET:FORM` | 342 | 0.00 | 0.28 | 0.05 | 0.20 |
+| `R:ADP` | 310 | 0.00 | 0.04 | 0.01 | 0.03 |
+| `M:ADP` | 284 | 0.00 | 0.02 | 0.04 | 0.09 |
+| `U:DET` | 268 | 0.00 | 0.04 | 0.02 | 0.05 |
+| `R:VERB` | 244 | 0.00 | 0.02 | 0.05 | 0.09 |
+| `M:PUNCT` | 219 | 0.00 | 0.30 | 0.00 | 0.08 |
+| `M:DET` | 210 | 0.00 | 0.01 | 0.01 | 0.15 |
+| `R:ADJ:FORM` | 205 | 0.00 | 0.20 | 0.09 | 0.11 |
+| `R:NOUN` | 197 | 0.00 | 0.08 | 0.08 | 0.16 |
+| `U:ADP` | 140 | 0.00 | 0.01 | 0.01 | 0.04 |
 
 ## What the systems change in correct prose
 

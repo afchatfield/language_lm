@@ -1,0 +1,20 @@
+{
+  "system": "fine-tuned-es",
+  "split": "dev",
+  "f0.5": 0.5904,
+  "precision": 0.6373,
+  "recall": 0.4559,
+  "overcorrection_rate": 0.07,
+  "detection_f": 0.6345,
+  "correction_f": 0.536,
+  "lenient_f0.5": null,
+  "lenient_correction_f": null,
+  "baseline_bar": 0.5987,
+  "explanation": {
+    "coverage": 0.9483,
+    "precision": 0.9817,
+    "type_accuracy": 0.8343,
+    "rewrites": 5822,
+    "claims": 5846
+  }
+}

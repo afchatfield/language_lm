@@ -219,3 +219,24 @@ def _known_splits(manifest: dict) -> str:
         )
         or "(none)"
     )
+
+
+def split_scoped(path: Path, split: str) -> Path:
+    """Where a report about ``split`` belongs, given the development report's path.
+
+    A held-out split's numbers must never overwrite the development record. The
+    two are not comparable -- different sentences, and one of them is a single
+    final read -- so they are different files, and the split says so in the
+    name: ``baselines.json`` for dev, ``baselines-test.json`` for test.
+
+    Only held-out splits are renamed. Dev keeps the path it has always had, so
+    every report, `make` target and cross-reference written before this existed
+    still resolves to the same file.
+
+    Args:
+        path: The development report's path, suffix included.
+        split: The split this report is about.
+    """
+    if split not in HELD_OUT_SPLITS:
+        return path
+    return path.with_name(f"{path.stem}-{split}{path.suffix}")

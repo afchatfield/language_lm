@@ -11,11 +11,12 @@
         clean-corpus lt-survey weights training-set phase2 thesaurus \
         check-corruptors check-citations corrupter backtranslation \
         setup-cuda train-data dry-run train evaluate phase3 \
-        preference-pairs train-dpo evaluate-test trim-vocab \
+        preference-pairs train-dpo evaluate-test trim-vocab baselines-test \
         clean-ngrams clean-data \
         ngrams-es corpora-es data-es dictionary-es overcorrection-es \
         baselines-es clean-corpus-es training-set-es train-data-es \
-        dry-run-es train-es phase5
+        dry-run-es train-es evaluate-es phase1-es phase5 \
+        baselines-es-test trim-vocab-es compress-es
 
 PYTHON ?= python
 COMPOSE = docker compose -f docker/docker-compose.yml
@@ -91,6 +92,9 @@ errant-check:  ## Measure the German ERRANT annotator against the corpus annotat
 
 baselines:  ## Run every Phase 1 baseline and write the results table
 	$(PYTHON) scripts/run_baselines.py
+
+baselines-test:  ## The same baselines on the held-out split, so a test score has a test bar
+	$(PYTHON) scripts/run_baselines.py --split test
 
 phase1: dictionary overcorrection errant-check baselines  ## Run the whole of Phase 1
 	@echo "Phase 1 artefacts are in reports/phase1/"
@@ -173,12 +177,17 @@ evaluate-test:  ## Unseal the held-out split. Once per model, at the very end.
 trim-vocab:  ## Trim the base model's vocabulary to the rows German and English use
 	$(PYTHON) scripts/trim_vocab.py --threshold 0.999
 
+# The adapter `evaluate-es` scores, and the row label it writes under.
+# Overridable so a second recipe does not overwrite the first one's report:
+#   make evaluate-es ADAPTER_ES=checkpoints/phase3-es-cw025 NAME_ES=fine-tuned-es-cw025
+ADAPTER_ES ?= checkpoints/phase3-es
+NAME_ES ?= fine-tuned-es
+
 # --- Phase 5: Spanish port ---------------------------------------------------
 #
-# Mirrors Phase 0/1/2/3's targets above, `-es` suffixed. No `evaluate-es` or
-# `phase5` chain to a trained model yet: `eval_finetuned.py` is not
-# language-parameterised, and there is no adapter to evaluate until a training
-# run finishes.
+# Mirrors Phase 0/1/2/3's targets above, `-es` suffixed. `eval_finetuned.py` is
+# language-parameterised now, so `evaluate-es` and a full `phase5` chain exist
+# alongside the rest.
 
 ngrams-es:  ## Download + extract the Spanish n-gram data (~1.7GB download, ~6GB on disk)
 	$(PYTHON) scripts/download_ngrams.py --lang es
@@ -224,6 +233,34 @@ dry-run-es:  ## Check the Spanish loss mask, the schema and one forward pass. Tr
 
 train-es:  ## LoRA fine-tune on the Spanish training set
 	$(PYTHON) scripts/train_sft.py --language es
+
+evaluate-es:  ## Score the Spanish adapter against the Phase 5 baselines
+	$(PYTHON) scripts/eval_finetuned.py --language es --adapter $(ADAPTER_ES) --name $(NAME_ES)
+
+# The adapter that actually ships, which is not `ADAPTER_ES`: that one is the
+# knob for scoring whichever recipe is being tried, and defaults to the first
+# run. `cw025` is the one Phase 5 chose, the Spanish counterpart of German's
+# `iter4-cw025`, so compression measures that one unless told otherwise.
+SHIP_ADAPTER_ES ?= checkpoints/phase3-es-cw025
+
+baselines-es-test:  ## Spanish baselines on the held-out split (needs lt-up with ngrams-es)
+	$(PYTHON) scripts/run_baselines.py --language es --split test
+
+trim-vocab-es:  ## Trim to the rows Spanish and English use, task corpus included
+	$(PYTHON) scripts/trim_vocab.py --threshold 0.999 --language es --languages es en \
+		--out checkpoints/base-trimmed-es
+
+# `--language es` counts the Spanish task corpus, which is what keeps the JSON
+# schema tokens; `--languages es en` picks the prose corpora. Phase 4's gate
+# failed by counting only the second, so they stay separate flags.
+compress-es: trim-vocab-es  ## Trim, merge the adapter, and score the trimmed Spanish model
+	$(PYTHON) scripts/merge_adapter.py --base checkpoints/base-trimmed-es \
+		--adapter $(SHIP_ADAPTER_ES) --out checkpoints/ship-es
+	$(PYTHON) scripts/eval_finetuned.py --language es --base checkpoints/base-trimmed-es \
+		--adapter $(SHIP_ADAPTER_ES) --name trimmed-nohealing-es
+
+phase5: train-data-es dry-run-es train-es evaluate-es  ## Everything Phase 5 needs, in order
+	@echo "Adapter in checkpoints/phase3-es/, results in reports/phase5/"
 
 # --- cleanup ----------------------------------------------------------------
 

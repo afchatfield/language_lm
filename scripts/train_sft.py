@@ -195,6 +195,15 @@ def main() -> None:
         eval_steps=train_cfg["eval_steps"],
         save_steps=train_cfg["save_steps"],
         save_total_limit=train_cfg.get("save_total_limit", 2),
+        # Keep the checkpoint the evaluation loss actually bottoms at, and end
+        # the run holding those weights rather than the last ones. Spanish's
+        # first run bottomed at epoch 1.98 and never recovered it by epoch 3,
+        # with `save_steps` coarser than `eval_steps` -- so the best checkpoint
+        # was evaluated, reported, and then deleted unseen. Off unless a config
+        # asks for it, so German's runs stay exactly as they were.
+        load_best_model_at_end=train_cfg.get("load_best_model_at_end", False),
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
         seed=train_cfg["seed"],
         report_to=[],
     )
@@ -207,6 +216,15 @@ def main() -> None:
     )
     trainer.train(resume_from_checkpoint=args.resume_from)
 
+    # Which weights are about to be written: with `load_best_model_at_end` the
+    # trainer has reloaded the best checkpoint, and saying so is the difference
+    # between a run that selected a model and one that merely stopped.
+    best = trainer.state.best_model_checkpoint
+    if best:
+        print(f"best checkpoint: {best} (eval_loss {trainer.state.best_metric:.5f})")
+    else:
+        print("best checkpoint: not tracked; saving the final weights")
+
     output.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(output))
     tokenizer.save_pretrained(str(output))
@@ -214,6 +232,8 @@ def main() -> None:
         json.dumps(
             {
                 "device": device,
+                "best_checkpoint": trainer.state.best_model_checkpoint,
+                "best_eval_loss": trainer.state.best_metric,
                 "train_examples": sizes.train,
                 "validation_examples": sizes.validation,
                 "dropped": sizes.dropped,

@@ -28,6 +28,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from langlm.data.m2 import Edit, M2Sentence
+from langlm.eval import canonical
 from langlm.eval.m2_scorer import Counts
 
 #: An edit reduced to what has to match: source span, and replacement text.
@@ -145,6 +146,13 @@ def score(
     """
     if len(gold) != len(hypothesis):
         raise ValueError(f"{len(hypothesis)} hypothesis sentences for {len(gold)} gold sentences")
+
+    # Same normalisation as the M2 scorer, and needed for the same reason here:
+    # the source-equality check below compares tokens, so a decomposed accent on
+    # one side would read as "these are different sentences" rather than as the
+    # same sentence spelled two ways. See `langlm.eval.canonical`.
+    gold = canonical.nfc_sentences(gold)
+    hypothesis = canonical.nfc_sentences(hypothesis)
 
     overall = Counts()
     by_type: dict[str, list[int]] = {}

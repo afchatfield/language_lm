@@ -1,0 +1,20 @@
+{
+  "system": "iter4-cw025-fewshot8",
+  "split": "dev",
+  "f0.5": 0.6882,
+  "precision": 0.7294,
+  "recall": 0.5612,
+  "overcorrection_rate": 0.0825,
+  "detection_f": 0.7381,
+  "correction_f": 0.6163,
+  "lenient_f0.5": 0.6932,
+  "lenient_correction_f": 0.6208,
+  "baseline_bar": 0.7072,
+  "explanation": {
+    "coverage": 0.8125,
+    "precision": 0.8057,
+    "type_accuracy": 0.664,
+    "rewrites": 5121,
+    "claims": 5673
+  }
+}

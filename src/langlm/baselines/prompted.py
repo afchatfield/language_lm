@@ -18,7 +18,9 @@ baseline.
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from functools import cached_property
 
 from langlm.config import load_config
@@ -121,7 +123,13 @@ class PromptedBaseline:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = (
+                "cuda"
+                if torch.cuda.is_available()
+                else "mps"
+                if torch.backends.mps.is_available()
+                else "cpu"
+            )
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
@@ -132,7 +140,8 @@ class PromptedBaseline:
             # decoding step on this M1, and with the same range as float32 it
             # cannot overflow the way float16 can on a model trained in bf16.
             model = AutoModelForCausalLM.from_pretrained(
-                self.repo_id, dtype=torch.bfloat16 if device == "mps" else torch.float32
+                self.repo_id,
+                dtype=torch.bfloat16 if device in ("mps", "cuda") else torch.float32,
             )
             model.to(device).eval()
             self._tokenizer, self._model = tokenizer, model
@@ -205,11 +214,39 @@ class _StopOnNewline:
         )
 
 
+def churn(source_tokens: Sequence[str], target_tokens: Sequence[str]) -> float:
+    """How much of a sentence an edit replaces, from 0.0 to 1.0.
+
+    The fraction of the two token sequences that is *not* a preserved common
+    subsequence. A spelling fix scores near zero; swapping in a different
+    sentence scores near one.
+    """
+    matcher = SequenceMatcher(a=source_tokens, b=target_tokens, autojunk=False)
+    kept = sum(block.size for block in matcher.get_matching_blocks())
+    total = len(source_tokens) + len(target_tokens)
+    return 1.0 - (2.0 * kept / total) if total else 0.0
+
+
+#: Reject a worked example that replaces more than half the sentence. Both
+#: corpora hold a tail of these -- 4.4% of corrected COWS-L2H sentences and
+#: 3.6% of Falko-MERLIN's -- and one of them is a bad thing to put in a prompt:
+#: it demonstrates "write a different sentence", which is the opposite of the
+#: instruction above it. Spanish's seed drew one at 0.86 and few-shot recall
+#: fell to 0.1072, the model declining to edit at all on 76% of dev.
+#:
+#: Set where it separates the two populations rather than where it flatters a
+#: number: German's eight shots run 0.00 to 0.22 and Spanish's 0.00 to 0.11
+#: once the outlier is gone, so at 0.5 this changes no German prompt and so no
+#: German number.
+MAX_SHOT_CHURN = 0.5
+
+
 def sample_shots(
     sentences: list[M2Sentence],
     count: int,
     seed: int,
     correct_share: float = 0.22,
+    max_churn: float = MAX_SHOT_CHURN,
 ) -> list[tuple[str, str]]:
     """Pick worked examples from a training split.
 
@@ -220,6 +257,8 @@ def sample_shots(
         correct_share: Fraction of examples that need no correction. The default
             is the measured Falko-MERLIN rate, so the prompt tells the model the
             truth about how often German learner text is already right.
+        max_churn: Reject an example replacing more than this share of the
+            sentence. See :data:`MAX_SHOT_CHURN`. Pass ``1.0`` to disable.
 
     Returns:
         ``(source, target)`` pairs.
@@ -229,6 +268,38 @@ def sample_shots(
     erroneous = [s for s in sentences if not s.is_correct()]
 
     wanted_correct = round(count * correct_share)
-    chosen = rng.sample(correct, wanted_correct) + rng.sample(erroneous, count - wanted_correct)
+    wanted_wrong = count - wanted_correct
+
+    # Draw first, reject second. Filtering the pool up front would have been
+    # simpler and was wrong: it changes what every later draw indexes into, so
+    # a prompt containing nothing worth rejecting still comes out different.
+    # Measured, not assumed -- pool-filtering replaced six of German's eight
+    # shots and pushed its worst churn from 0.22 to 0.33. Rejecting after the
+    # draw touches a prompt only when that prompt actually holds an offender,
+    # and spends no randomness when it does not, so German's eight shots and
+    # every number resting on them are bit-identical.
+    # Drawn in the original order -- correct examples first -- because the two
+    # calls share one RNG stream and swapping them would reshuffle both.
+    chosen_correct = rng.sample(correct, wanted_correct)
+    drawn = rng.sample(erroneous, wanted_wrong)
+    kept = [s for s in drawn if churn(s.source_tokens, s.apply(0)) <= max_churn]
+    if len(kept) < wanted_wrong:
+        seen = {id(s) for s in drawn}
+        eligible = [
+            s
+            for s in erroneous
+            if id(s) not in seen and churn(s.source_tokens, s.apply(0)) <= max_churn
+        ]
+        short = wanted_wrong - len(kept)
+        kept += rng.sample(eligible, min(short, len(eligible)))
+        # A corpus with too few minimal corrections to fill the prompt gets the
+        # rejected ones back rather than a short prompt or an exception. The
+        # filter is meant to improve a prompt that can be improved, not to
+        # decide that some corpora may not have one.
+        if len(kept) < wanted_wrong:
+            rejected = [s for s in drawn if s not in kept]
+            kept += rejected[: wanted_wrong - len(kept)]
+
+    chosen = chosen_correct + kept
     rng.shuffle(chosen)
     return [(sentence.source, sentence.target()) for sentence in chosen]

@@ -177,10 +177,51 @@ prose, and the model's own type accuracy 0.7106 -> 0.7229. The wider rule set is
 also what a Phase 5 Spanish port would be built from, and the `das_dass`
 mislabel it turned up was a real bug. But as a lever on F0.5 it is spent.
 
+## 6. Worked examples in the prompt, after fine-tuning
+
+The adapter has only ever been prompted the way it was trained: one
+instruction, one sentence, no examples. That was never a measured choice, only
+an obvious-looking one, so here is the number.
+
+`checkpoints/phase3-de-iter4-cw025`, Falko-MERLIN dev, 2,503 sentences,
+identical weights and identical decoding. The only difference is eight worked
+examples between the instruction and the sentence, drawn from `de.jsonl` with
+the same seed and correct-share rule the Phase 1 prompted baselines use, and
+rendered with `build_target` so each example's answer is the exact JSON the
+model was trained to emit.
+
+| | P | R | F0.5 | Overcorrection |
+|---|---:|---:|---:|---:|
+| zero-shot, the trained shape | 0.7339 | 0.6174 | **0.7072** | 9.8% |
+| eight worked examples | 0.7300 | 0.5622 | **0.6882** | 8.2% |
+
+**-0.0191**, paired bootstrap over dev sentences, 95% CI [-0.0272, -0.0109],
+p < 0.0001. That is about one and a half times the size of the `changes`
+down-weighting that iteration 4 was built around, pointing the other way.
+
+The loss is entirely recall. Precision moves 0.7339 -> 0.7300, which is
+nothing; recall falls 0.6174 -> 0.5622. The examples make the model *more*
+reluctant to edit, which is also why its overcorrection rate improves to 8.2%
+-- and that improvement is not a consolation, because F0.5 already weights
+precision twice as heavily as recall and the total still comes out behind.
+
+The explanations degrade faster than the corrections. Coverage 0.862 -> 0.813
+and claim precision 0.9269 -> 0.8057, on *fewer* rewrites (5,121 against
+5,658) and slightly more claims. A model imitating eight visible `changes`
+lists writes what that list usually looks like rather than what it just did.
+
+The reading is that in-context examples are not merely redundant after
+supervised fine-tuning on 76k of them, they are off-distribution. The prompt
+shape is part of what the adapter learned, and changing it at serving time
+costs more than the examples can return. `eval_finetuned.py --few-shot N`
+exists so this stays reproducible; the default is 0 and every other number in
+this project is at that default.
+
 ## Where this leaves the score
 
-Four serving-side changes and one corpus change, and none of them moved it. The
-score has been 0.694-0.696 throughout. That is now the interesting fact: the
+Five serving-side changes and one corpus change, and none of them moved it
+upward -- the fifth, prompting the fine-tuned model with examples, moved it
+down. The score has been 0.694-0.696 throughout. That is now the interesting fact: the
 remaining loss is not in the metric's strictness, not in the type mix of the
 training data, and not in anything a filter or a dictionary can reach from
 outside the model. What is left is the model -- 1.7B parameters, and the honest
